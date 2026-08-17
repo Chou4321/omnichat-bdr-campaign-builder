@@ -1,0 +1,94 @@
+import unittest
+from pathlib import Path
+
+from streamlit.testing.v1 import AppTest
+
+
+class UiSmokeTests(unittest.TestCase):
+    def test_sidebar_and_default_page_render(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        self.assertFalse(app.exception)
+        self.assertEqual(
+            app.sidebar.radio[0].options,
+            [
+                "LINE 找窗口",
+                "活動管理",
+                "Email 信件",
+                "LINE 邀約訊息",
+                "活動圖文",
+                "AI 文案資料庫",
+            ],
+        )
+        self.assertEqual(app.header[0].value, "LINE 找窗口")
+
+    def test_line_contact_finder_fields_render(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        self.assertFalse(app.exception)
+        labels = [item.label for item in app.text_input]
+        self.assertIn("品牌名稱", labels)
+        self.assertIn("補充說明（選填）", [item.label for item in app.text_area])
+        self.assertIn("已寄信到公司信箱", [item.label for item in app.checkbox])
+        self.assertIn("產生第一則 LINE 找窗口訊息", [item.label for item in app.button])
+
+    def test_activity_manager_has_single_campaign_builder_form(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        app.sidebar.radio[0].set_value("活動管理").run(timeout=10)
+        self.assertFalse(app.exception)
+        labels = [item.label for item in app.text_input]
+        self.assertIn("活動名稱 *", labels)
+        self.assertIn("活動時間", labels)
+        self.assertIn("活動地點", labels)
+        self.assertIn("活動地址", labels)
+        self.assertIn("報名連結", labels)
+        self.assertIn("預約交流連結", labels)
+        self.assertIn("合作單位 / 講者", labels)
+        self.assertIn("活動重點 1", labels)
+        self.assertIn("活動重點 4", labels)
+        self.assertIn("信件大標 A（選填）", labels)
+        areas = [item.label for item in app.text_area]
+        self.assertIn("活動一句話摘要", areas)
+        self.assertIn("活動介紹", areas)
+        self.assertNotIn("Landing Page 內容", areas)
+        self.assertNotIn("活動議程", areas)
+        self.assertNotIn("複製活動", [item.label for item in app.button])
+
+    def test_cold_outreach_has_controlled_observation_sources(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
+        source = next(
+            item for item in app.selectbox if item.label == "品牌觀察來源"
+        )
+        self.assertEqual(
+            source.options, ["手動輸入", "AI 文案資料庫", "對應產業模板"]
+        )
+        text_areas = [item.label for item in app.text_area]
+        self.assertNotIn("活動 Landing Page 內容", text_areas)
+        self.assertNotIn("活動議程", text_areas)
+
+    def test_precall_email_shows_scoped_attachments(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
+        app.selectbox[1].set_value("活動報名後打招呼").run(timeout=10)
+        self.assertFalse(app.exception)
+        self.assertIn("Pre-call 信件附件", [item.value for item in app.subheader])
+
+    def test_line_activity_invitation_does_not_repeat_campaign_fields(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        app.sidebar.radio[0].set_value("LINE 邀約訊息").run(timeout=10)
+        app.selectbox[1].set_value("活動邀約").run(timeout=10)
+        self.assertFalse(app.exception)
+        labels = [item.label for item in app.text_input]
+        self.assertNotIn("活動類型標籤", labels)
+        self.assertNotIn("活動時間", labels)
+        self.assertNotIn("活動地點或線上形式", labels)
+        self.assertNotIn("報名連結", labels)
+
+
+if __name__ == "__main__":
+    unittest.main()
