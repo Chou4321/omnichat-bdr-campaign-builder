@@ -49,7 +49,7 @@ class CampaignIntegrationTests(unittest.TestCase):
 
         self.assertEqual(len(subjects), 3)
         self.assertIn(FOOD_CAMPAIGN["introduction"], cold_body)
-        self.assertIn(FOOD_CAMPAIGN["introduction"], precall_body)
+        self.assertIn("活動聚焦食品消費變化", precall_body)
         self.assertIn(FOOD_CAMPAIGN["event_date"], line_message)
         self.assertIn(FOOD_CAMPAIGN["registration_url"], line_message)
         self.assertIn(FOOD_CAMPAIGN["name"], finder_message)

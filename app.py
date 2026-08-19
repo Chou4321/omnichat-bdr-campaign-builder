@@ -88,92 +88,6 @@ def lead_inputs(prefix: str) -> dict[str, str]:
     }
 
 
-def _industry_observation_template(industry: str) -> str:
-    template = next(
-        (
-            item for item in load_industry_templates()
-            if item.get("industry_name") == industry
-            or any(keyword in industry for keyword in ("食品", "伴手禮"))
-            and item.get("id") == "food-gift"
-        ),
-        None,
-    )
-    if not template:
-        return "目前沒有對應的產業模板；請改用手動輸入或 AI 文案資料庫。"
-    return "\n".join(f"• {item}" for item in template.get("pain_points", [])[:4])
-
-
-def cold_outreach_lead_inputs() -> dict[str, str]:
-    col1, col2 = st.columns(2)
-    brand = col1.text_input("品牌", key="Email_brand")
-    contact = col2.text_input("窗口", key="Email_contact")
-    industry = st.text_input("品牌產業", key="Email_industry")
-    source = st.selectbox(
-        "品牌觀察來源",
-        ["手動輸入", "AI 文案資料庫", "對應產業模板"],
-        key="Email_observation_source",
-    )
-    observation = ""
-    if source == "手動輸入":
-        observation = st.text_area(
-            "品牌觀察",
-            key="Email_observation",
-            placeholder="只填寫已確認的品牌資訊；留白時不會自動補寫。",
-        )
-    elif source == "AI 文案資料庫":
-        library_items = [
-            item for item in load_copy_templates()
-            if item.get("channel") in {"產業切角", "品牌案例"}
-        ]
-        if library_items:
-            selected_id = st.selectbox(
-                "選擇資料庫內容",
-                [item["id"] for item in library_items],
-                format_func=lambda item_id: next(
-                    item["name"] for item in library_items if item["id"] == item_id
-                ),
-                key="Email_observation_library",
-            )
-            observation = next(
-                item["content"] for item in library_items if item["id"] == selected_id
-            )
-            st.text_area("引用內容", observation, disabled=True)
-        else:
-            st.info("AI 文案資料庫目前沒有「產業切角」或「品牌案例」內容，本次不加入品牌觀察。")
-    else:
-        observation = _industry_observation_template(industry)
-        st.text_area("對應產業模板", observation, disabled=True)
-    return {
-        "brand": brand,
-        "contact": contact,
-        "industry": industry,
-        "observation": observation,
-        "observation_source": source,
-        "precall": "",
-        "needs": "",
-    }
-
-
-def precall_attachment_inputs(campaign: dict) -> dict:
-    """Attachments used only by 活動報名後打招呼 (Pre-call)."""
-    st.subheader("Pre-call 信件附件")
-    banner_path = campaign.get("image_path", "")
-    if banner_path and (BASE_DIR / banner_path).exists():
-        st.image(
-            str(BASE_DIR / banner_path),
-            caption="附件① 活動 Banner（由活動管理帶入）",
-            width=480,
-        )
-    else:
-        st.warning("活動管理尚未上傳活動 Banner。")
-    service_pdf = st.file_uploader(
-        "附件② Omnichat 服務介紹 PDF",
-        type=["pdf"],
-        key=f"precall_service_pdf_{campaign['id']}",
-    )
-    return {"service_pdf_name": service_pdf.name if service_pdf else ""}
-
-
 def copyable_line_output(state_key: str) -> None:
     if state_key not in st.session_state:
         return
@@ -544,11 +458,12 @@ def email_builder_v1() -> None:
     scenario = st.selectbox("情境", EMAIL_SCENARIOS, key="Email_scenario")
 
     st.subheader("Step 2｜活動內容")
+    introduction_label = "活動介紹（選填）" if scenario == "一般開發信" else "活動介紹 *"
     introduction = st.text_area(
-        "活動介紹 *",
+        introduction_label,
         height=240,
         key="Email_activity_introduction",
-        placeholder="請貼上本次活動的完整介紹；信件只會依此內容產生。",
+        placeholder="可貼上活動介紹、Landing Page 文字、EDM、Speaker 資訊、議程或活動主題。",
     )
     banner = st.file_uploader(
         "活動 Banner（選填）",
@@ -565,12 +480,12 @@ def email_builder_v1() -> None:
     observation = st.text_area(
         "品牌觀察（選填）",
         key="Email_observation",
-        placeholder="可留白；系統不會自行補寫品牌資訊。",
+        placeholder="沒有可留白，例如：近期主打中秋禮盒、官網有會員制度、近期推出新品、有 LINE 官方帳號等。",
     )
 
     st.subheader("Step 4｜產生 Email")
-    if st.button("產生 Email", type="primary", key="generate_Email_v1"):
-        if not introduction.strip():
+    if st.button("產生 Email 信件", type="primary", key="generate_Email_v1"):
+        if scenario != "一般開發信" and not introduction.strip():
             st.error("請填寫活動介紹。")
         elif not brand.strip():
             st.error("請填寫品牌名稱。")

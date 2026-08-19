@@ -86,7 +86,7 @@ class GeneratorTests(unittest.TestCase):
         self.assertEqual(len(subjects), 3)
         self.assertIn("活動前提醒", subjects[0])
         self.assertIn("王小姐", body)
-        self.assertIn(CAMPAIGN["introduction"], body)
+        self.assertIn("零售市場趨勢", body)
         self.assertIn("如需協助", cta)
 
     def test_line(self):
@@ -167,7 +167,7 @@ class GeneratorTests(unittest.TestCase):
         for scenario in EMAIL_SCENARIOS:
             subjects, body, cta = generate_email(CAMPAIGN, scenario, LEAD)
             self.assertEqual(len(subjects), 3)
-            self.assertIn(CAMPAIGN["introduction"], body)
+            self.assertIn("零售市場趨勢", body)
             self.assertTrue(cta)
             bodies.append(body)
         self.assertEqual(len(set(bodies)), 5)
@@ -180,8 +180,19 @@ class GeneratorTests(unittest.TestCase):
             {"introduction": "活動介紹內容", "image_path": "uploads/banner.png"},
             "一般開發信", LEAD,
         )
-        self.assertIn("活動 Banner｜（未上傳）", without_banner)
+        self.assertNotIn("活動 Banner｜", without_banner)
         self.assertIn("活動 Banner｜uploads/banner.png", with_banner)
+
+    def test_general_email_needs_no_activity_or_observation(self):
+        _, body, _ = generate_email(
+            {"introduction": ""},
+            "一般開發信",
+            {"brand": "測試品牌", "contact": "", "observation": ""},
+        )
+        self.assertTrue(body.startswith("您好，"))
+        self.assertIn("測試品牌", body)
+        self.assertNotIn("近期主打", body)
+        self.assertNotIn("活動 Banner", body)
 
 
 if __name__ == "__main__":

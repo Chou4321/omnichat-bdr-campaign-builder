@@ -63,32 +63,48 @@ def _generate_v1_email(
     greeting = f"Dear {contact} 您好，" if contact != "您好" else "您好，"
     observation = (lead.get("observation") or "").strip()
     observation_block = f"\n\n{observation}" if observation else ""
-    banner = campaign.get("image_path") or "（未上傳）"
     topic = _intro_topic(introduction)
     subjects = _v1_subjects(scenario, brand, topic)
+    points = _intro_points(introduction)
+    points_block = "\n".join(f"• {point}" for point in points)
+    banner_block = (
+        f"\n\n【活動 Banner｜{campaign['image_path']}】"
+        if campaign.get("image_path") else ""
+    )
 
     templates = {
         "陌生開發邀約": (
             f"{greeting}\n\n想和您分享一場與 {brand} 可能相關的交流活動。"
-            f"{observation_block}\n\n{introduction}\n\n"
+            f"{observation_block}\n\n【活動介紹】\n{introduction}\n\n"
+            f"【活動重點】\n{points_block}\n\n"
+            f"【活動資訊】\n{_intro_event_info(introduction)}\n\n"
             "若這也是您近期關注的方向，歡迎直接回覆此信，我很樂意進一步分享活動資訊。"
         ),
         "活動前提醒": (
-            f"{greeting}\n\n提醒您，您關注的活動即將舉行。\n\n"
-            f"{introduction}\n\n若行程或參與方式需要協助，歡迎直接回覆此信。"
+            f"{greeting}\n\n已收到您的報名，活動前先與您打聲招呼！\n\n"
+            f"【活動一句話特色】\n{_intro_feature(introduction)}\n\n"
+            f"💡 若您近期正關注：\n{points_block}\n\n"
+            "很樂意在活動前依您的品牌現況分享相關案例，讓當天交流更有收穫。\n\n"
+            "👉 歡迎直接回覆方便時段，彈性安排 15 分鐘交流。"
         ),
         "活動後跟進": (
-            f"{greeting}\n\n謝謝您參與本次活動。\n\n{introduction}\n\n"
-            "想了解上述內容是否回應到您目前的需求；若有希望深入交流的方向，歡迎直接回覆此信。"
+            f"{greeting}\n\n謝謝您參與本次活動；若當天未能出席，也整理了重點供您參考。\n\n"
+            f"【活動重點整理】\n{points_block}\n\n"
+            "如需活動簡報或相關資料，歡迎直接回覆此信索取。\n\n"
+            "若有希望進一步交流的方向，也很樂意安排時間討論。"
         ),
         "自主報名確認": (
-            f"{greeting}\n\n收到您報名本次活動，目前正在陸續確認名單中，先與您打聲招呼！\n\n"
-            f"{introduction}\n\n若有特別想了解的內容，也歡迎直接回覆告訴我。"
+            f"{greeting}\n\n已收到您報名本次活動，目前正在陸續確認名單中。\n\n"
+            "若活動採審核制或有後續參與資訊，我們會再另行通知。\n\n"
+            f"【活動資訊】\n{_intro_feature(introduction)}\n\n"
+            "若有任何問題，歡迎直接回覆此信。\n\n期待活動當天與您交流！"
         ),
         "一般開發信": (
-            f"{greeting}\n\n想和 {brand} 交流近期的品牌經營方向。"
-            f"{observation_block}\n\n{introduction}\n\n"
-            "若內容與您目前的規劃相關，歡迎直接回覆此信，我們可以再找合適時間交流。"
+            f"{greeting}{observation_block}\n\n"
+            f"這次聯繫是希望和 {brand} 交流顧客經營與數位互動的實際做法。\n\n"
+            "Omnichat 可分享相關品牌在顧客互動、分眾溝通與經營流程上的應用案例。"
+            f"{f'{chr(10)}{chr(10)}補充資訊：{introduction}' if introduction else ''}\n\n"
+            "若您方便，歡迎直接回覆此信，我們可以再找合適時間交流。"
         ),
     }
     cta = {
@@ -98,7 +114,7 @@ def _generate_v1_email(
         "自主報名確認": "歡迎回覆您最關注的活動內容。",
         "一般開發信": "歡迎直接回覆此信，安排後續交流。",
     }[scenario]
-    body = f"{templates[scenario]}\n\n【活動 Banner｜{banner}】"
+    body = f"{templates[scenario]}{banner_block}"
     return subjects, body, cta
 
 
@@ -107,6 +123,37 @@ def _intro_topic(introduction: str) -> str:
     for separator in ("。", "！", "!", "？", "?"):
         first_line = first_line.split(separator, 1)[0]
     return first_line[:36].rstrip("，、；; ") or "活動交流"
+
+
+def _intro_feature(introduction: str) -> str:
+    if not introduction.strip():
+        return "活動資訊將另行提供。"
+    first = _intro_points(introduction)[0]
+    return first[:100]
+
+
+def _intro_points(introduction: str) -> list[str]:
+    """Split only supplied activity text into up to four display points."""
+    normalized = introduction.replace("\r", "\n")
+    for separator in ("。", "，", ",", "；", ";", "！", "!", "？", "?"):
+        normalized = normalized.replace(separator, "\n")
+    points = []
+    for line in normalized.splitlines():
+        point = line.strip().lstrip("-–—•✔✅0123456789.、 ")
+        if point and point not in points:
+            points.append(point[:120])
+        if len(points) == 4:
+            break
+    return points or ["請參考活動介紹"]
+
+
+def _intro_event_info(introduction: str) -> str:
+    keywords = ("日期", "時間", "地點", "地址", "形式", "報名", "連結", "網址")
+    lines = [
+        line.strip() for line in introduction.splitlines()
+        if line.strip() and any(keyword in line for keyword in keywords)
+    ]
+    return "\n".join(lines[:6]) or "活動介紹未提供日期、地點或報名資訊。"
 
 
 def _v1_subjects(scenario: str, brand: str, topic: str) -> list[str]:

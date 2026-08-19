@@ -80,7 +80,20 @@ class UiSmokeTests(unittest.TestCase):
         uploaders = app.get("file_uploader")
         self.assertEqual(len(uploaders), 1)
         self.assertEqual(uploaders[0].label, "活動 Banner（選填）")
-        self.assertIn("產生 Email", [item.label for item in app.button])
+        self.assertIn("產生 Email 信件", [item.label for item in app.button])
+
+    def test_general_email_allows_empty_activity_intro(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
+        app.selectbox[0].set_value("一般開發信").run(timeout=10)
+        brand = next(item for item in app.text_input if item.label == "品牌名稱 *")
+        brand.set_value("測試品牌")
+        button = next(item for item in app.button if item.label == "產生 Email 信件")
+        button.click().run(timeout=10)
+        self.assertFalse(app.exception)
+        self.assertNotIn("請填寫活動介紹。", [item.value for item in app.error])
+        self.assertIn("Email 內文", app.session_state["Email_result"])
 
     def test_line_activity_invitation_does_not_repeat_campaign_fields(self):
         app_path = Path(__file__).parents[1] / "app.py"
