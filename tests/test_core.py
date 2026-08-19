@@ -84,10 +84,10 @@ class GeneratorTests(unittest.TestCase):
     def test_email(self):
         subjects, body, cta = generate_email(CAMPAIGN, "活動前提醒", LEAD)
         self.assertEqual(len(subjects), 3)
-        self.assertIn("測試品牌", subjects[0])
+        self.assertIn("活動前提醒", subjects[0])
         self.assertIn("王小姐", body)
-        self.assertIn("https://example.com/register", body)
-        self.assertIn("https://example.com/register", cta)
+        self.assertIn(CAMPAIGN["introduction"], body)
+        self.assertIn("如需協助", cta)
 
     def test_line(self):
         campaign = {
@@ -142,76 +142,12 @@ class GeneratorTests(unittest.TestCase):
         })
 
     def test_scenario_counts(self):
-        self.assertEqual(len(EMAIL_SCENARIOS), 13)
+        self.assertEqual(EMAIL_SCENARIOS, [
+            "陌生開發邀約", "活動前提醒", "活動後跟進", "自主報名確認", "一般開發信"
+        ])
         self.assertEqual(len(LINE_SCENARIOS), 13)
 
-    def test_cold_outreach_physical_event_structure(self):
-        campaign = {
-            **CAMPAIGN,
-            "name": "食品產業成長新曲線",
-            "event_date": "2026-08-26",
-            "event_format": "實體",
-            "topic": "從會員數據到分眾行銷的跨界實戰",
-            "partner": "台灣牧場 & 食品研究所",
-            "summary": "本次活動分享食品產業趨勢、會員數據與分眾經營實務。",
-            "activity_point_1": "掌握食品市場趨勢",
-            "activity_point_2": "建立會員數據策略",
-            "activity_point_3": "精準分眾提升互動",
-            "activity_point_4": "食品品牌案例分享",
-        }
-        lead = {
-            "brand": "測試食品品牌",
-            "contact": "行銷團隊",
-            "industry": "烘焙伴手禮",
-            "observation": "",
-            "needs": "會員分眾與回購優化",
-        }
-        event = {
-            "event_date": "2026/08/26",
-            "event_time": "由使用者手動填寫",
-            "event_format": "實體",
-            "location": "台北市區星級酒店",
-            "address": "由使用者手動填寫",
-            "registration_url": "https://example.com/register",
-            "is_approval_required": True,
-            "seat_note": "限量席次，採審核制",
-            "activity_intro": "食品產業趨勢、會員數據、精準分眾與品牌實戰案例分享。",
-        }
-        subjects, body, cta = generate_email(
-            campaign, "陌生開發邀約", lead, event_details=event
-        )
-        self.assertEqual(len(subjects), 3)
-        self.assertTrue(body.startswith("Dear 行銷團隊 您好，"))
-        self.assertEqual(subjects[0], CAMPAIGN["email_title_a"])
-        self.assertIn("節慶檔期取得大量新客", body)
-        self.assertIn(campaign["summary"], body)
-        self.assertIn("活動地點｜台北市區星級酒店", body)
-        self.assertIn("活動時間｜2026/08/26 由使用者手動填寫", body)
-        self.assertGreaterEqual(body.count("✔"), 3)
-        self.assertIn("也歡迎直接回覆信件", body)
-        self.assertTrue(body.endswith("【活動 Banner｜（請於活動管理上傳）】"))
-        self.assertIn("烘焙伴手禮相關案例", cta)
-        self.assertNotIn("我們觀察到", body)
-        self.assertNotIn("我是 Omnichat", body)
-        self.assertNotIn("LINE", body)
-        self.assertNotIn("CRM", body)
-        self.assertNotIn("AI", body)
-
-    def test_cold_outreach_online_event_hides_address(self):
-        event = {
-            "event_format": "線上",
-            "event_date": "2026/08/26",
-            "event_time": "14:00",
-            "online_method": "審核通過後以 Email 寄送直播連結",
-            "activity_intro": "市場趨勢、會員數據、精準分眾、回購策略與品牌實戰案例分享。",
-        }
-        _, body, _ = generate_email(
-            CAMPAIGN, "陌生開發邀約", LEAD, event_details=event
-        )
-        self.assertIn("活動地點｜審核通過後以 Email 寄送直播連結", body)
-        self.assertNotIn("活動地址｜", body)
-
-    def test_cold_outreach_only_uses_supplied_observation(self):
+    def test_v1_uses_only_supplied_observation(self):
         lead = {
             "brand": "測試品牌",
             "contact": "行銷部",
@@ -222,77 +158,30 @@ class GeneratorTests(unittest.TestCase):
             CAMPAIGN,
             "陌生開發邀約",
             lead,
-            event_details={
-                "activity_intro": "市場趨勢、會員數據、精準分眾、回購策略與品牌實戰案例分享。"
-            },
         )
         self.assertIn("官網目前以節慶禮盒為主要溝通內容。", body)
         self.assertNotIn("測試品牌 的產業與現況", body)
 
-    def test_cold_email_warns_when_activity_content_is_insufficient(self):
-        campaign = {
-            **CAMPAIGN,
-            "topic": "成長交流",
-            "highlights": "",
-            "introduction": "",
-            "activity_point_1": "",
-            "activity_point_2": "",
-            "activity_point_3": "",
-            "activity_point_4": "",
-        }
-        warning = validate_cold_email_sources(campaign, {}, "食品")
-        self.assertIsNotNone(warning)
-        self.assertIn("請先到活動管理補充活動重點", warning)
+    def test_five_v1_templates_are_distinct_and_grounded(self):
+        bodies = []
+        for scenario in EMAIL_SCENARIOS:
+            subjects, body, cta = generate_email(CAMPAIGN, scenario, LEAD)
+            self.assertEqual(len(subjects), 3)
+            self.assertIn(CAMPAIGN["introduction"], body)
+            self.assertTrue(cta)
+            bodies.append(body)
+        self.assertEqual(len(set(bodies)), 5)
 
-    def test_cold_email_only_mentions_features_present_in_activity_content(self):
-        campaign = {
-            **CAMPAIGN,
-            "activity_point_1": "掌握市場趨勢",
-            "activity_point_2": "建立會員數據策略",
-            "activity_point_3": "精準分眾",
-            "activity_point_4": "LINE 在會員經營流程中的實際應用",
-        }
-        _, body, _ = generate_email(
-            campaign, "陌生開發邀約", LEAD, event_details={}
+    def test_v1_banner_is_optional(self):
+        _, without_banner, _ = generate_email(
+            {"introduction": "活動介紹內容"}, "一般開發信", LEAD
         )
-        self.assertIn("LINE 在會員經營流程中的實際應用", body)
-        self.assertNotIn("CRM", body)
-        self.assertNotIn("AI 在品牌", body)
-
-    def test_registered_greeting_uses_grounded_precall_flow(self):
-        campaign = {
-            **CAMPAIGN,
-            "name": "食品產業成長新曲線",
-            "topic": "從會員數據到分眾行銷的跨界實戰",
-            "partner": "食品研究所、台灣牧場",
-            "highlights": "食品市場趨勢、會員數據、精準分眾、私域流量與品牌實戰案例。",
-            "image_path": "uploads/food-banner.png",
-        }
-        lead = {"contact": "行銷團隊", "industry": "食品"}
-        subjects, body, cta = generate_email(
-            campaign,
-            "活動報名後打招呼",
-            lead,
-            event_details={"service_pdf_name": "Omnichat服務介紹.pdf"},
+        _, with_banner, _ = generate_email(
+            {"introduction": "活動介紹內容", "image_path": "uploads/banner.png"},
+            "一般開發信", LEAD,
         )
-        self.assertEqual(len(subjects), 3)
-        self.assertEqual(subjects[:3], [
-            campaign["email_title_a"],
-            campaign["email_title_b"],
-            campaign["email_title_c"],
-        ])
-        self.assertIn("收到您報名", body)
-        self.assertIn(campaign["summary"], body)
-        self.assertEqual(body.count("•"), 4)
-        self.assertIn("很樂意在活動前依您的產業與品牌現況", body)
-        self.assertIn("（彈性安排 15 分鐘交流）", body)
-        self.assertIn("活動 Banner｜uploads/food-banner.png", body)
-        self.assertIn("Omnichat 服務介紹｜Omnichat服務介紹.pdf", body)
-        self.assertNotIn("AI 在品牌", body)
-        self.assertNotIn("LINE 在會員", body)
-        self.assertNotIn("CRM", body)
-        self.assertNotIn("【活動資訊】", body)
-        self.assertIn("點此快速預約", cta)
+        self.assertIn("活動 Banner｜（未上傳）", without_banner)
+        self.assertIn("活動 Banner｜uploads/banner.png", with_banner)
 
 
 if __name__ == "__main__":

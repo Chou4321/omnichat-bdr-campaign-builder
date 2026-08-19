@@ -47,37 +47,82 @@ def generate_email(
     campaign: dict[str, Any], scenario: str, lead: dict[str, str],
     event_details: Optional[dict[str, Any]] = None,
 ) -> tuple[list[str], str, str]:
-    if scenario == "陌生開發邀約":
-        return _generate_cold_outreach_email(campaign, lead, event_details or {})
-    if scenario == "活動報名後打招呼":
-        return _generate_precall_email(campaign, lead, event_details or {})
+    supported = {"陌生開發邀約", "活動前提醒", "活動後跟進", "自主報名確認", "一般開發信"}
+    if scenario not in supported:
+        raise ValueError(f"不支援的 Email 情境：{scenario}")
+    return _generate_v1_email(campaign, scenario, lead)
 
-    brand = lead.get("brand") or "貴品牌"
-    contact = lead.get("contact") or "貴品牌團隊"
-    subjects = [
-        f"【{scenario}】{campaign.get('name', 'Omnichat 活動')}｜{brand}",
-        f"邀請 {brand} 交流：{campaign.get('topic') or campaign.get('name', '活動資訊')}",
-        f"{contact} 您好｜一場與{lead.get('needs') or '會員成長'}有關的活動",
-    ]
-    body = f"""{contact} 您好，
 
-我是 Omnichat 團隊。這封信想和您分享「{_campaign_context(campaign)}」。
+def _generate_v1_email(
+    campaign: dict[str, Any], scenario: str, lead: dict[str, str]
+) -> tuple[list[str], str, str]:
+    """Email Builder V1.0: five deterministic templates, no external AI API."""
+    introduction = (campaign.get("introduction") or "").strip()
+    brand = (lead.get("brand") or "貴品牌").strip()
+    contact = (lead.get("contact") or "您好").strip()
+    greeting = f"Dear {contact} 您好，" if contact != "您好" else "您好，"
+    observation = (lead.get("observation") or "").strip()
+    observation_block = f"\n\n{observation}" if observation else ""
+    banner = campaign.get("image_path") or "（未上傳）"
+    topic = _intro_topic(introduction)
+    subjects = _v1_subjects(scenario, brand, topic)
 
-我們觀察到 {brand} 在{lead.get('industry') or '品牌經營'}領域持續投入。{lead.get('observation') or '許多品牌正積極整合會員互動與轉換流程。'}
-
-本次活動主題：{campaign.get('topic') or '待補充'}
-活動亮點：{campaign.get('highlights') or '待補充'}
-與貴品牌的可能連結：{lead.get('needs') or '期待進一步了解目前的會員經營需求。'}
-
-{_scenario_email_paragraph(scenario, campaign)}
-
-先前交流紀錄：{lead.get('precall') or '尚無'}
-
-若您方便，歡迎直接回覆此信，我會協助安排後續交流。
-
-Omnichat 團隊"""
-    cta = _scenario_cta(scenario, campaign)
+    templates = {
+        "陌生開發邀約": (
+            f"{greeting}\n\n想和您分享一場與 {brand} 可能相關的交流活動。"
+            f"{observation_block}\n\n{introduction}\n\n"
+            "若這也是您近期關注的方向，歡迎直接回覆此信，我很樂意進一步分享活動資訊。"
+        ),
+        "活動前提醒": (
+            f"{greeting}\n\n提醒您，您關注的活動即將舉行。\n\n"
+            f"{introduction}\n\n若行程或參與方式需要協助，歡迎直接回覆此信。"
+        ),
+        "活動後跟進": (
+            f"{greeting}\n\n謝謝您參與本次活動。\n\n{introduction}\n\n"
+            "想了解上述內容是否回應到您目前的需求；若有希望深入交流的方向，歡迎直接回覆此信。"
+        ),
+        "自主報名確認": (
+            f"{greeting}\n\n收到您報名本次活動，目前正在陸續確認名單中，先與您打聲招呼！\n\n"
+            f"{introduction}\n\n若有特別想了解的內容，也歡迎直接回覆告訴我。"
+        ),
+        "一般開發信": (
+            f"{greeting}\n\n想和 {brand} 交流近期的品牌經營方向。"
+            f"{observation_block}\n\n{introduction}\n\n"
+            "若內容與您目前的規劃相關，歡迎直接回覆此信，我們可以再找合適時間交流。"
+        ),
+    }
+    cta = {
+        "陌生開發邀約": "歡迎直接回覆此信，索取完整活動資訊。",
+        "活動前提醒": "如需協助，歡迎直接回覆此信。",
+        "活動後跟進": "歡迎回覆您想進一步交流的方向。",
+        "自主報名確認": "歡迎回覆您最關注的活動內容。",
+        "一般開發信": "歡迎直接回覆此信，安排後續交流。",
+    }[scenario]
+    body = f"{templates[scenario]}\n\n【活動 Banner｜{banner}】"
     return subjects, body, cta
+
+
+def _intro_topic(introduction: str) -> str:
+    first_line = next((line.strip() for line in introduction.splitlines() if line.strip()), "活動交流")
+    for separator in ("。", "！", "!", "？", "?"):
+        first_line = first_line.split(separator, 1)[0]
+    return first_line[:36].rstrip("，、；; ") or "活動交流"
+
+
+def _v1_subjects(scenario: str, brand: str, topic: str) -> list[str]:
+    labels = {
+        "陌生開發邀約": "活動邀請",
+        "活動前提醒": "活動前提醒",
+        "活動後跟進": "活動後交流",
+        "自主報名確認": "報名確認",
+        "一般開發信": "交流邀請",
+    }
+    label = labels[scenario]
+    return [
+        f"【{label}】{topic}",
+        f"{brand} 您好｜{topic}",
+        f"關於「{topic}」的{label}",
+    ]
 
 
 def _generate_precall_email(

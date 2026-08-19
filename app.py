@@ -454,6 +454,9 @@ def campaign_manager() -> None:
 
 
 def message_generator(channel: str) -> None:
+    if channel == "Email":
+        email_builder_v1()
+        return
     title = "Email 信件" if channel == "Email" else "LINE 邀約訊息"
     st.header(title)
     if channel == "Email":
@@ -533,6 +536,67 @@ def message_generator(channel: str) -> None:
         st.download_button("下載文字檔", result, file_name=f"{channel.lower()}_draft.txt")
 
 
+def email_builder_v1() -> None:
+    st.header("Email 信件")
+    st.caption("V1.0 精簡版｜使用五種固定 Template，不串接外部 AI API。")
+
+    st.subheader("Step 1｜選擇情境")
+    scenario = st.selectbox("情境", EMAIL_SCENARIOS, key="Email_scenario")
+
+    st.subheader("Step 2｜活動內容")
+    introduction = st.text_area(
+        "活動介紹 *",
+        height=240,
+        key="Email_activity_introduction",
+        placeholder="請貼上本次活動的完整介紹；信件只會依此內容產生。",
+    )
+    banner = st.file_uploader(
+        "活動 Banner（選填）",
+        type=["png", "jpg", "jpeg", "webp"],
+        key="Email_banner",
+        help="僅作為信件附圖保存，不進行圖片辨識。",
+    )
+    if banner:
+        st.image(banner, caption="本次 Email Banner", width=480)
+
+    st.subheader("Step 3｜品牌資訊")
+    brand = st.text_input("品牌名稱 *", key="Email_brand")
+    contact = st.text_input("窗口（選填）", key="Email_contact")
+    observation = st.text_area(
+        "品牌觀察（選填）",
+        key="Email_observation",
+        placeholder="可留白；系統不會自行補寫品牌資訊。",
+    )
+
+    st.subheader("Step 4｜產生 Email")
+    if st.button("產生 Email", type="primary", key="generate_Email_v1"):
+        if not introduction.strip():
+            st.error("請填寫活動介紹。")
+        elif not brand.strip():
+            st.error("請填寫品牌名稱。")
+        else:
+            image_path = _save_banner(banner) if banner else ""
+            subjects, body, cta = generate_email(
+                {"introduction": introduction.strip(), "image_path": image_path},
+                scenario,
+                {
+                    "brand": brand.strip(),
+                    "contact": contact.strip(),
+                    "observation": observation.strip(),
+                },
+            )
+            st.session_state["Email_result"] = (
+                "信件主旨 3 版：\n"
+                + "\n".join(f"{index}. {subject}" for index, subject in enumerate(subjects, 1))
+                + f"\n\nEmail 內文：\n{body}\n\nCTA：\n{cta}"
+            )
+
+    result = st.session_state.get("Email_result")
+    if result:
+        st.text_area("產生結果（可直接修改）", result, height=420, key="Email_output")
+        st.download_button("下載文字檔", result, file_name="email_draft.txt")
+
+
 def banner_generator() -> None:
     st.header("活動圖文")
     st.caption("依據活動內容產出宣傳素材所需文案。")
@@ -592,9 +656,18 @@ def template_library() -> None:
 if "pending_email_transfer" in st.session_state:
     transfer = st.session_state.pop("pending_email_transfer")
     st.session_state["active_page"] = "Email 信件"
-    st.session_state["Email_campaign"] = transfer["campaign_id"]
     st.session_state["Email_brand"] = transfer["brand"]
     st.session_state["Email_contact"] = transfer["contact"]
+    transferred_campaign = next(
+        (item for item in load_campaigns() if item["id"] == transfer["campaign_id"]),
+        None,
+    )
+    if transferred_campaign:
+        st.session_state["Email_activity_introduction"] = (
+            transferred_campaign.get("introduction")
+            or transferred_campaign.get("summary")
+            or ""
+        )
 
 st.sidebar.title("Omnichat")
 st.sidebar.caption("BDR Campaign Builder")

@@ -55,27 +55,32 @@ class UiSmokeTests(unittest.TestCase):
         self.assertNotIn("活動議程", areas)
         self.assertNotIn("複製活動", [item.label for item in app.button])
 
-    def test_cold_outreach_has_controlled_observation_sources(self):
+    def test_email_builder_v1_has_only_simplified_fields(self):
         app_path = Path(__file__).parents[1] / "app.py"
         app = AppTest.from_file(str(app_path)).run(timeout=10)
         app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
-        source = next(
-            item for item in app.selectbox if item.label == "品牌觀察來源"
-        )
-        self.assertEqual(
-            source.options, ["手動輸入", "AI 文案資料庫", "對應產業模板"]
-        )
+        self.assertEqual(app.selectbox[0].options, [
+            "陌生開發邀約", "活動前提醒", "活動後跟進", "自主報名確認", "一般開發信"
+        ])
         text_areas = [item.label for item in app.text_area]
+        text_inputs = [item.label for item in app.text_input]
+        self.assertIn("活動介紹 *", text_areas)
+        self.assertIn("品牌觀察（選填）", text_areas)
+        self.assertIn("品牌名稱 *", text_inputs)
+        self.assertIn("窗口（選填）", text_inputs)
+        self.assertNotIn("品牌觀察來源", [item.label for item in app.selectbox])
         self.assertNotIn("活動 Landing Page 內容", text_areas)
         self.assertNotIn("活動議程", text_areas)
 
-    def test_precall_email_shows_scoped_attachments(self):
+    def test_email_builder_v1_has_banner_and_generate_button(self):
         app_path = Path(__file__).parents[1] / "app.py"
         app = AppTest.from_file(str(app_path)).run(timeout=10)
         app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
-        app.selectbox[1].set_value("活動報名後打招呼").run(timeout=10)
         self.assertFalse(app.exception)
-        self.assertIn("Pre-call 信件附件", [item.value for item in app.subheader])
+        uploaders = app.get("file_uploader")
+        self.assertEqual(len(uploaders), 1)
+        self.assertEqual(uploaders[0].label, "活動 Banner（選填）")
+        self.assertIn("產生 Email", [item.label for item in app.button])
 
     def test_line_activity_invitation_does_not_repeat_campaign_fields(self):
         app_path = Path(__file__).parents[1] / "app.py"

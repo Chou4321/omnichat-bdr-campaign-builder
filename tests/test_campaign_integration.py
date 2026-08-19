@@ -41,15 +41,15 @@ class CampaignIntegrationTests(unittest.TestCase):
 
         lead = {"brand": "測試伴手禮", "contact": "王小姐", "industry": "食品 / 伴手禮"}
         subjects, cold_body, _ = generate_email(campaign, "陌生開發邀約", lead)
-        _, precall_body, _ = generate_email(campaign, "活動報名後打招呼", lead)
+        _, precall_body, _ = generate_email(campaign, "自主報名確認", lead)
         line_message = generate_line(campaign, "活動邀約", lead)
         finder_message = generate_first_contact_message(False, campaign)
         finder_reply = generate_activity_reply(campaign)
         visual_copy = generate_banner(campaign)
 
-        self.assertEqual(subjects[0], FOOD_CAMPAIGN["email_title_a"])
-        self.assertIn(FOOD_CAMPAIGN["summary"], cold_body)
-        self.assertIn(FOOD_CAMPAIGN["summary"], precall_body)
+        self.assertEqual(len(subjects), 3)
+        self.assertIn(FOOD_CAMPAIGN["introduction"], cold_body)
+        self.assertIn(FOOD_CAMPAIGN["introduction"], precall_body)
         self.assertIn(FOOD_CAMPAIGN["event_date"], line_message)
         self.assertIn(FOOD_CAMPAIGN["registration_url"], line_message)
         self.assertIn(FOOD_CAMPAIGN["name"], finder_message)
@@ -62,4 +62,3 @@ class CampaignIntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
