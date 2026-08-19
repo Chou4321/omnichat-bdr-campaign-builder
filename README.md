@@ -4,14 +4,12 @@
 
 ## 功能
 
-- LINE 找窗口
 - 活動管理
 - Email 信件
 - LINE 邀約訊息
-- 活動圖文
-- AI 文案資料庫（保留名稱，內容為人工管理）
+- 產業別資料庫
 
-活動只需建立一次。Email、LINE、活動圖文會共用活動摘要、介紹、四個活動重點、日期時間、連結與 Banner。產業模板僅提供開發參考，活動內容永遠具有較高權重。
+活動只需建立一次。Email 與 LINE 會共用活動摘要、介紹、四個活動重點、日期時間、連結與 Banner。產業別資料庫由使用者人工維護且預設不引用；開啟引用時仍以活動內容為最高權重。
 
 ## 本機啟動
 
@@ -36,7 +34,7 @@ Windows 可將 `.venv/bin/` 改為 `.venv\Scripts\`。
 
 - `data/campaigns.json`：活動資料
 - `data/industry_templates.json`：產業 Knowledge Base
-- `data/templates.json`：人工文案資料
+- `data/templates.json`：既有人工文案資料（保留相容性，不顯示於主導覽）
 - `uploads/`：本機上傳素材
 
 所有 JSON 存取集中於 `storage.py`。目前 local JSON 與 `uploads/` 適合本機或原型測試；Streamlit Community Cloud 的執行檔案系統不是持久型資料庫，重新部署或重啟後的使用者寫入不保證保留。正式多人使用前，需將 storage layer 換成持久化資料庫／物件儲存，但本版本未串接 Supabase 或其他付費服務。

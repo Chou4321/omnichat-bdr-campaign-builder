@@ -86,7 +86,7 @@ class GeneratorTests(unittest.TestCase):
         self.assertEqual(len(subjects), 3)
         self.assertIn("活動前提醒", subjects[0])
         self.assertIn("王小姐", body)
-        self.assertIn("零售市場趨勢", body)
+        self.assertIn(CAMPAIGN["summary"], body)
         self.assertIn("如需協助", cta)
 
     def test_line(self):
@@ -167,7 +167,12 @@ class GeneratorTests(unittest.TestCase):
         for scenario in EMAIL_SCENARIOS:
             subjects, body, cta = generate_email(CAMPAIGN, scenario, LEAD)
             self.assertEqual(len(subjects), 3)
-            self.assertIn("零售市場趨勢", body)
+            self.assertTrue(
+                CAMPAIGN["summary"] in body
+                or CAMPAIGN["activity_point_1"] in body
+                or CAMPAIGN["introduction"] in body
+                or CAMPAIGN["name"] in body
+            )
             self.assertTrue(cta)
             bodies.append(body)
         self.assertEqual(len(set(bodies)), 5)
@@ -193,6 +198,24 @@ class GeneratorTests(unittest.TestCase):
         self.assertIn("測試品牌", body)
         self.assertNotIn("近期主打", body)
         self.assertNotIn("活動 Banner", body)
+
+    def test_industry_reference_is_opt_in_and_activity_guarded(self):
+        template = {
+            "pain_points": ["節慶新客後續回購有限", "LINE 好友缺乏分眾"],
+            "development_angles": ["會員回購", "LINE 分眾"],
+            "showcase_cases": [{
+                "brand_name": "簡單李", "category": "烘焙伴手禮",
+                "summary": "會員案例", "use_cases": "會員回購",
+            }],
+            "common_ctas": [],
+        }
+        lead = {**LEAD, "industry_context": template}
+        _, referenced, _ = generate_email(CAMPAIGN, "陌生開發邀約", lead)
+        _, plain, _ = generate_email(CAMPAIGN, "陌生開發邀約", LEAD)
+        self.assertIn("節慶新客後續回購有限", referenced)
+        self.assertIn("簡單李", referenced)
+        self.assertNotIn("LINE 好友缺乏分眾", referenced)
+        self.assertNotIn("節慶新客後續回購有限", plain)
 
 
 if __name__ == "__main__":

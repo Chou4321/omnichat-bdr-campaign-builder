@@ -11,9 +11,8 @@ from generators import (
     generate_banner,
     generate_email,
     generate_line,
-    validate_cold_email_sources,
 )
-from models import Campaign, CONTENT_SECTIONS, EMAIL_SCENARIOS, LINE_SCENARIOS, Template
+from models import Campaign, EMAIL_SCENARIOS, LINE_SCENARIOS
 from line_contact_finder import (
     generate_activity_reply,
     generate_email_provided_reply,
@@ -21,14 +20,13 @@ from line_contact_finder import (
 )
 from storage import (
     delete_campaign,
-    delete_copy_template,
+    delete_industry_template,
     load_campaigns,
-    load_copy_templates,
     load_industry_templates,
     save_campaign,
-    save_copy_template,
+    save_industry_template,
     update_campaign,
-    update_copy_template,
+    update_industry_template,
 )
 
 
@@ -70,21 +68,27 @@ def campaign_selector(key: str) -> Optional[dict]:
     return next(item for item in campaigns if item["id"] == selected_id)
 
 
-def lead_inputs(prefix: str) -> dict[str, str]:
-    col1, col2 = st.columns(2)
-    brand = col1.text_input("品牌", key=f"{prefix}_brand")
-    contact = col2.text_input("窗口", key=f"{prefix}_contact")
-    industry = col1.text_input("品牌產業", key=f"{prefix}_industry")
-    observation = col2.text_area("品牌觀察", key=f"{prefix}_observation")
-    precall = col1.text_area("Pre-call 紀錄", key=f"{prefix}_precall")
-    needs = col2.text_area("品牌需求", key=f"{prefix}_needs")
+def _selected_industry_context(campaign: dict, enabled: bool) -> Optional[dict]:
+    if not enabled:
+        return None
+    industry_name = campaign.get("primary_industry") or campaign.get("suitable_industries", "")
+    template = next(
+        (item for item in load_industry_templates() if item.get("industry_name") == industry_name),
+        None,
+    )
+    if not template:
+        st.info(f"產業別資料庫尚未建立「{industry_name or '未指定產業'}」資料，本次不引用。")
+    return template
+
+
+def line_lead_inputs() -> dict[str, str]:
+    brand = st.text_input("品牌（選填）", key="LINE_brand")
+    contact = st.text_input("窗口（選填）", key="LINE_contact")
+    note = st.text_area("補充資訊（選填）", key="LINE_note")
     return {
         "brand": brand,
         "contact": contact,
-        "industry": industry,
-        "observation": observation,
-        "precall": precall,
-        "needs": needs,
+        "observation": note,
     }
 
 
@@ -320,7 +324,7 @@ def _show_industry_knowledge(industry_name: str) -> None:
 
 def campaign_manager() -> None:
     st.header("活動管理")
-    st.caption("建立單一活動資料，Email、LINE 與活動圖文會直接共用。")
+    st.caption("活動資料中心｜儲存後由 Email 與 LINE 直接共用。")
     campaigns = load_campaigns()
     with st.expander("＋ 新增活動", expanded=not campaigns):
         with st.form("campaign_create_form", clear_on_submit=True):
@@ -367,113 +371,41 @@ def campaign_manager() -> None:
             )
 
 
-def message_generator(channel: str) -> None:
-    if channel == "Email":
-        email_builder_v1()
-        return
-    title = "Email 信件" if channel == "Email" else "LINE 邀約訊息"
-    st.header(title)
-    if channel == "Email":
-        st.caption("依不同活動階段產出 Email 信件。")
-        scenarios = EMAIL_SCENARIOS
-    else:
-        st.caption("產出 BDR 在 LINE 上使用的活動開發、邀約與追蹤訊息。")
-        scenarios = LINE_SCENARIOS
+def line_message_generator() -> None:
+    st.header("LINE 邀約訊息")
+    st.caption("選擇已儲存活動後，產出手機閱讀友善的邀約與追蹤訊息。")
     st.subheader("Step 1｜選擇活動")
-    campaign = campaign_selector(f"{channel}_campaign")
+    campaign = campaign_selector("LINE_campaign")
     if not campaign:
         return
     st.subheader("Step 2｜選擇情境")
-    scenario = st.selectbox("情境", scenarios, key=f"{channel}_scenario")
-    event_details = None
-    selected_email_title = ""
-    if channel == "Email" and scenario == "活動報名後打招呼":
-        event_details = precall_attachment_inputs(campaign)
-    if channel == "Email" and scenario in {"陌生開發邀約", "活動報名後打招呼"}:
-        saved_titles = [
-            campaign.get("email_title_a", ""),
-            campaign.get("email_title_b", ""),
-            campaign.get("email_title_c", ""),
-        ]
-        saved_titles = [title for title in saved_titles if title]
-        if saved_titles:
-            selected_email_title = st.selectbox(
-                "選擇信件大標", saved_titles, key=f"{channel}_{scenario}_selected_title"
-            )
-    st.subheader("Step 3｜輸入品牌資訊")
-    if channel == "Email" and scenario == "陌生開發邀約":
-        lead = cold_outreach_lead_inputs()
-    else:
-        lead = lead_inputs(channel)
-    st.subheader("Step 4｜產生內容")
-    if st.button(f"產生{title}", type="primary", key=f"generate_{channel}"):
-        if channel == "Email":
-            source_warning = None
-            if scenario == "陌生開發邀約":
-                source_warning = validate_cold_email_sources(
-                    campaign, event_details or {}, lead.get("industry", "")
-                )
-            if source_warning:
-                st.error(source_warning)
-                subjects, body, cta = [], "", ""
-            else:
-                details = dict(event_details or {})
-                details["selected_email_title"] = selected_email_title
-                subjects, body, cta = generate_email(
-                    campaign, scenario, lead, event_details=details
-                )
-            if scenario == "陌生開發邀約" and not source_warning:
-                displayed_title = selected_email_title or subjects[0]
-                st.session_state[f"{channel}_result"] = (
-                    f"信件大標：\n{displayed_title}\n\nEmail 內文：\n{body}"
-                )
-            elif scenario == "活動報名後打招呼" and not source_warning:
-                displayed_title = selected_email_title or subjects[0]
-                st.session_state[f"{channel}_result"] = (
-                    f"信件大標：\n{displayed_title}\n\nEmail 內文：\n{body}"
-                )
-            elif not source_warning:
-                st.session_state[f"{channel}_result"] = (
-                    "信件主旨 3 版：\n"
-                    + "\n".join(
-                        f"{index}. {subject}" for index, subject in enumerate(subjects, 1)
-                    )
-                    + f"\n\nEmail 內文：\n{body}\n\nCTA：\n{cta}"
-                )
-        else:
-            st.session_state[f"{channel}_result"] = generate_line(
-                campaign, scenario, lead, event_details=event_details
-            )
-    result = st.session_state.get(f"{channel}_result")
+    scenario = st.selectbox("LINE 情境", LINE_SCENARIOS, key="LINE_scenario")
+    st.subheader("Step 3｜品牌資訊")
+    lead = line_lead_inputs()
+    use_industry = st.checkbox(
+        "是否引用產業資料庫", value=False, key="LINE_use_industry"
+    )
+    lead["industry_context"] = _selected_industry_context(campaign, use_industry)
+    st.subheader("Step 4｜產生 LINE 訊息")
+    if st.button("產生 LINE 訊息", type="primary", key="generate_LINE"):
+        st.session_state["LINE_result"] = generate_line(campaign, scenario, lead)
+    result = st.session_state.get("LINE_result")
     if result:
-        st.text_area("產生結果（可直接修改）", result, height=360, key=f"{channel}_output")
-        st.download_button("下載文字檔", result, file_name=f"{channel.lower()}_draft.txt")
+        st.text_area("產生結果（可直接修改）", result, height=360, key="LINE_output")
+        st.download_button("下載文字檔", result, file_name="line_draft.txt")
 
 
 def email_builder_v1() -> None:
     st.header("Email 信件")
-    st.caption("V1.0 精簡版｜使用五種固定 Template，不串接外部 AI API。")
+    st.caption("選擇已儲存活動，使用五種固定 Template 產生 Email。")
 
-    st.subheader("Step 1｜選擇情境")
+    st.subheader("Step 1｜選擇活動")
+    campaign = campaign_selector("Email_campaign")
+    if not campaign:
+        return
+
+    st.subheader("Step 2｜選擇 Email 情境")
     scenario = st.selectbox("情境", EMAIL_SCENARIOS, key="Email_scenario")
-
-    st.subheader("Step 2｜活動內容")
-    introduction_label = "活動介紹（選填）" if scenario == "一般開發信" else "活動介紹 *"
-    introduction = st.text_area(
-        introduction_label,
-        height=240,
-        key="Email_activity_introduction",
-        placeholder="可貼上活動介紹、Landing Page 文字、EDM、Speaker 資訊、議程或活動主題。",
-    )
-    banner = st.file_uploader(
-        "活動 Banner（選填）",
-        type=["png", "jpg", "jpeg", "webp"],
-        key="Email_banner",
-        help="僅作為信件附圖保存，不進行圖片辨識。",
-    )
-    if banner:
-        st.image(banner, caption="本次 Email Banner", width=480)
-
     st.subheader("Step 3｜品牌資訊")
     brand = st.text_input("品牌名稱 *", key="Email_brand")
     contact = st.text_input("窗口（選填）", key="Email_contact")
@@ -482,22 +414,24 @@ def email_builder_v1() -> None:
         key="Email_observation",
         placeholder="沒有可留白，例如：近期主打中秋禮盒、官網有會員制度、近期推出新品、有 LINE 官方帳號等。",
     )
+    use_industry = st.checkbox(
+        "是否引用產業資料庫", value=False, key="Email_use_industry"
+    )
+    industry_context = _selected_industry_context(campaign, use_industry)
 
     st.subheader("Step 4｜產生 Email")
     if st.button("產生 Email 信件", type="primary", key="generate_Email_v1"):
-        if scenario != "一般開發信" and not introduction.strip():
-            st.error("請填寫活動介紹。")
-        elif not brand.strip():
+        if not brand.strip():
             st.error("請填寫品牌名稱。")
         else:
-            image_path = _save_banner(banner) if banner else ""
             subjects, body, cta = generate_email(
-                {"introduction": introduction.strip(), "image_path": image_path},
+                campaign,
                 scenario,
                 {
                     "brand": brand.strip(),
                     "contact": contact.strip(),
                     "observation": observation.strip(),
+                    "industry_context": industry_context,
                 },
             )
             st.session_state["Email_result"] = (
@@ -508,8 +442,10 @@ def email_builder_v1() -> None:
 
     result = st.session_state.get("Email_result")
     if result:
-        st.text_area("產生結果（可直接修改）", result, height=420, key="Email_output")
-        st.download_button("下載文字檔", result, file_name="email_draft.txt")
+        copyable_line_output("Email_result")
+        st.download_button(
+            "下載文字檔", st.session_state["Email_result"], file_name="email_draft.txt"
+        )
 
 
 def banner_generator() -> None:
@@ -525,79 +461,138 @@ def banner_generator() -> None:
             st.text_area(label, value, height=130, key=f"banner_{label}")
 
 
-def template_library() -> None:
-    st.header("AI 文案資料庫")
-    st.caption("第一版提供文案資料管理，不串接 AI API。")
-    templates = load_copy_templates()
-    tabs = st.tabs(CONTENT_SECTIONS)
-    for section, tab in zip(CONTENT_SECTIONS, tabs):
-        with tab:
-            section_items = [item for item in templates if item.get("channel") == section]
-            with st.expander(f"＋ 新增{section}", expanded=not section_items):
-                with st.form(f"new_{section}", clear_on_submit=True):
-                    name = st.text_input("資料名稱 *")
-                    content = st.text_area("內容 *", height=180)
-                    submitted = st.form_submit_button("新增", type="primary")
-                if submitted:
-                    if not name.strip() or not content.strip():
-                        st.error("資料名稱與內容為必填。")
-                    else:
-                        save_copy_template(Template(name, section, "資料庫", content).to_dict())
-                        st.success("資料已新增。")
-                        st.rerun()
-            if not section_items:
-                st.info("目前尚無資料。")
-            for item in section_items:
-                with st.expander(f"查看｜{item['name']}"):
-                    with st.form(f"edit_{item['id']}"):
-                        name = st.text_input("資料名稱", item["name"])
-                        content = st.text_area("內容", item["content"], height=180)
-                        col1, col2 = st.columns(2)
-                        update = col1.form_submit_button("儲存修改")
-                        delete = col2.form_submit_button("刪除")
-                    if update:
-                        update_copy_template(item["id"], {
-                            "name": name, "channel": section,
-                            "scenario": item.get("scenario", "資料庫"), "content": content,
-                        })
-                        st.success("資料已更新。")
-                        st.rerun()
-                    if delete:
-                        delete_copy_template(item["id"])
-                        st.success("資料已刪除。")
-                        st.rerun()
+def _multiline(value: object) -> str:
+    return "\n".join(value) if isinstance(value, list) else ""
+
+
+def _line_items(value: str) -> list[str]:
+    return [line.strip().lstrip("-• ") for line in value.splitlines() if line.strip()]
+
+
+def _showcase_text(cases: list[dict]) -> str:
+    return "\n".join(
+        "｜".join([
+            case.get("brand_name", ""), case.get("category", ""),
+            case.get("summary", ""), case.get("use_cases", ""),
+        ]) for case in cases
+    )
+
+
+def _parse_showcases(value: str) -> list[dict]:
+    cases = []
+    for line in value.splitlines():
+        if not line.strip():
+            continue
+        fields = [item.strip() for item in line.split("｜", 3)]
+        fields += [""] * (4 - len(fields))
+        cases.append({
+            "brand_name": fields[0], "category": fields[1],
+            "summary": fields[2], "use_cases": fields[3],
+        })
+    return cases
+
+
+def _industry_form(prefix: str, item: Optional[dict] = None) -> dict:
+    item = item or {}
+    name = st.text_input("產業名稱 *", item.get("industry_name", ""), key=f"{prefix}_name")
+    description = st.text_area(
+        "產業說明", item.get("description", ""), key=f"{prefix}_description"
+    )
+    pain_points = st.text_area(
+        "常見痛點（每行一筆）", _multiline(item.get("pain_points", [])),
+        key=f"{prefix}_pains", height=150,
+    )
+    angles = st.text_area(
+        "常見開發切角（每行一筆）", _multiline(item.get("development_angles", [])),
+        key=f"{prefix}_angles", height=130,
+    )
+    scenarios = st.text_area(
+        "Omnichat 可應用情境（每行一筆）", _multiline(item.get("omnichat_scenarios", [])),
+        key=f"{prefix}_scenarios", height=130,
+    )
+    showcases = st.text_area(
+        "Showcase / 品牌案例",
+        _showcase_text(item.get("showcase_cases", [])), key=f"{prefix}_showcases", height=150,
+        help="每行格式：品牌名稱｜品牌分類｜案例簡述｜可引用情境",
+    )
+    ctas = st.text_area(
+        "常用 CTA（每行一筆）", _multiline(item.get("common_ctas", [])),
+        key=f"{prefix}_ctas", height=130,
+    )
+    return {
+        "industry_name": name.strip(), "description": description.strip(),
+        "pain_points": _line_items(pain_points),
+        "development_angles": _line_items(angles),
+        "omnichat_scenarios": _line_items(scenarios),
+        "showcase_cases": _parse_showcases(showcases),
+        "common_ctas": _line_items(ctas),
+        # Preserve legacy knowledge fields when editing an existing record.
+        "brand_scenarios": item.get("brand_scenarios", []),
+        "showcases": item.get("showcases", {}),
+        "case_rules": item.get("case_rules", []),
+    }
+
+
+def industry_database() -> None:
+    st.header("產業別資料庫")
+    st.caption("由使用者維護產業開發 Know-how；不使用任何 AI API。")
+    industries = load_industry_templates()
+
+    with st.expander("＋ 新增產業", expanded=not industries):
+        with st.form("industry_create_form", clear_on_submit=True):
+            values = _industry_form("industry_create")
+            submitted = st.form_submit_button("新增產業", type="primary")
+        if submitted:
+            if not values["industry_name"]:
+                st.error("請填寫產業名稱。")
+            else:
+                save_industry_template({"id": str(uuid4()), **values})
+                st.success("產業資料已新增。")
+                st.rerun()
+
+    st.subheader(f"產業清單（{len(industries)}）")
+    for item in industries:
+        with st.expander(item.get("industry_name", "未命名產業")):
+            with st.form(f"industry_edit_{item['id']}"):
+                values = _industry_form(f"industry_{item['id']}", item)
+                col1, col2 = st.columns(2)
+                update = col1.form_submit_button("儲存修改", type="primary")
+                delete = col2.form_submit_button("刪除產業")
+            if update:
+                if not values["industry_name"]:
+                    st.error("請填寫產業名稱。")
+                else:
+                    update_industry_template(item["id"], values)
+                    st.success("產業資料已更新。")
+                    st.rerun()
+            if delete:
+                delete_industry_template(item["id"])
+                st.success("產業資料已刪除。")
+                st.rerun()
 
 
 if "pending_email_transfer" in st.session_state:
     transfer = st.session_state.pop("pending_email_transfer")
     st.session_state["active_page"] = "Email 信件"
+    st.session_state["Email_campaign"] = transfer["campaign_id"]
     st.session_state["Email_brand"] = transfer["brand"]
     st.session_state["Email_contact"] = transfer["contact"]
-    transferred_campaign = next(
-        (item for item in load_campaigns() if item["id"] == transfer["campaign_id"]),
-        None,
-    )
-    if transferred_campaign:
-        st.session_state["Email_activity_introduction"] = (
-            transferred_campaign.get("introduction")
-            or transferred_campaign.get("summary")
-            or ""
-        )
 
 st.sidebar.title("Omnichat")
 st.sidebar.caption("BDR Campaign Builder")
+NAV_ITEMS = ["活動管理", "Email 信件", "LINE 邀約訊息", "產業別資料庫"]
+if st.session_state.get("active_page") not in NAV_ITEMS:
+    st.session_state["active_page"] = "活動管理"
 page = st.sidebar.radio(
     "功能選單",
-    ["LINE 找窗口", "活動管理", "Email 信件", "LINE 邀約訊息", "活動圖文", "AI 文案資料庫"],
+    NAV_ITEMS,
     key="active_page",
 )
 
 pages = {
-    "LINE 找窗口": line_contact_finder,
     "活動管理": campaign_manager,
-    "Email 信件": lambda: message_generator("Email"),
-    "LINE 邀約訊息": lambda: message_generator("LINE"),
-    "活動圖文": banner_generator,
-    "AI 文案資料庫": template_library,
+    "Email 信件": email_builder_v1,
+    "LINE 邀約訊息": line_message_generator,
+    "產業別資料庫": industry_database,
 }
 pages[page]()

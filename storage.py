@@ -126,6 +126,12 @@ def update_industry_template(
     return JsonStore(path).update(template_id, values)
 
 
+def delete_industry_template(
+    template_id: str, path: Union[str, Path] = INDUSTRY_TEMPLATES_PATH
+) -> bool:
+    return JsonStore(path).delete(template_id)
+
+
 def load_copy_templates(
     path: Union[str, Path] = COPY_TEMPLATES_PATH,
 ) -> list[dict[str, Any]]:

@@ -63,10 +63,19 @@ def _generate_v1_email(
     greeting = f"Dear {contact} 您好，" if contact != "您好" else "您好，"
     observation = (lead.get("observation") or "").strip()
     observation_block = f"\n\n{observation}" if observation else ""
-    topic = _intro_topic(introduction)
+    topic = campaign.get("name") or _intro_topic(introduction)
     subjects = _v1_subjects(scenario, brand, topic)
-    points = _intro_points(introduction)
+    points = _campaign_points(campaign) or _intro_points(introduction)
     points_block = "\n".join(f"• {point}" for point in points)
+    feature = campaign.get("summary") or _intro_feature(introduction)
+    activity_info = _campaign_activity_info(campaign)
+    industry_reference = _safe_industry_reference(
+        lead.get("industry_context"), campaign
+    )
+    industry_opening = ""
+    if industry_reference["pain_points"]:
+        industry_opening = "\n\n" + "；".join(industry_reference["pain_points"][:2]) + "。"
+    reference_block = _industry_reference_block(industry_reference)
     banner_block = (
         f"\n\n【活動 Banner｜{campaign['image_path']}】"
         if campaign.get("image_path") else ""
@@ -74,15 +83,16 @@ def _generate_v1_email(
 
     templates = {
         "陌生開發邀約": (
-            f"{greeting}\n\n想和您分享一場與 {brand} 可能相關的交流活動。"
+            f"{greeting}\n\n想和您分享一場與 {brand} 可能相關的交流活動。{industry_opening}"
             f"{observation_block}\n\n【活動介紹】\n{introduction}\n\n"
             f"【活動重點】\n{points_block}\n\n"
-            f"【活動資訊】\n{_intro_event_info(introduction)}\n\n"
+            f"【活動資訊】\n{activity_info}\n\n"
+            f"{reference_block}"
             "若這也是您近期關注的方向，歡迎直接回覆此信，我很樂意進一步分享活動資訊。"
         ),
         "活動前提醒": (
             f"{greeting}\n\n已收到您的報名，活動前先與您打聲招呼！\n\n"
-            f"【活動一句話特色】\n{_intro_feature(introduction)}\n\n"
+            f"【活動一句話特色】\n{feature}\n\n"
             f"💡 若您近期正關注：\n{points_block}\n\n"
             "很樂意在活動前依您的品牌現況分享相關案例，讓當天交流更有收穫。\n\n"
             "👉 歡迎直接回覆方便時段，彈性安排 15 分鐘交流。"
@@ -96,7 +106,7 @@ def _generate_v1_email(
         "自主報名確認": (
             f"{greeting}\n\n已收到您報名本次活動，目前正在陸續確認名單中。\n\n"
             "若活動採審核制或有後續參與資訊，我們會再另行通知。\n\n"
-            f"【活動資訊】\n{_intro_feature(introduction)}\n\n"
+            f"【活動資訊】\n{activity_info}\n\n"
             "若有任何問題，歡迎直接回覆此信。\n\n期待活動當天與您交流！"
         ),
         "一般開發信": (
@@ -104,6 +114,7 @@ def _generate_v1_email(
             f"這次聯繫是希望和 {brand} 交流顧客經營與數位互動的實際做法。\n\n"
             "Omnichat 可分享相關品牌在顧客互動、分眾溝通與經營流程上的應用案例。"
             f"{f'{chr(10)}{chr(10)}補充資訊：{introduction}' if introduction else ''}\n\n"
+            f"{reference_block}"
             "若您方便，歡迎直接回覆此信，我們可以再找合適時間交流。"
         ),
     }
@@ -154,6 +165,56 @@ def _intro_event_info(introduction: str) -> str:
         if line.strip() and any(keyword in line for keyword in keywords)
     ]
     return "\n".join(lines[:6]) or "活動介紹未提供日期、地點或報名資訊。"
+
+
+def _campaign_activity_info(campaign: dict[str, Any]) -> str:
+    lines = [
+        f"活動名稱｜{campaign.get('name', '')}",
+        f"活動時間｜{' '.join(value for value in (campaign.get('event_date', ''), campaign.get('event_time', '')) if value)}",
+        f"活動形式｜{campaign.get('event_format', '')}",
+        f"活動地點｜{campaign.get('location', '')}",
+    ]
+    if campaign.get("event_format") != "線上" and campaign.get("address"):
+        lines.append(f"活動地址｜{campaign['address']}")
+    if campaign.get("registration_url"):
+        lines.append(f"報名連結｜{campaign['registration_url']}")
+    return "\n".join(line for line in lines if not line.endswith("｜"))
+
+
+def _safe_industry_reference(
+    template: Optional[dict[str, Any]], campaign: dict[str, Any]
+) -> dict[str, list]:
+    if not template:
+        return {"pain_points": [], "development_angles": [], "showcase_cases": [], "common_ctas": []}
+    activity_source = _activity_source(campaign, {})
+    restricted = ("AI", "LINE", "CRM", "Meta", "自動化")
+
+    def allowed(text: str) -> bool:
+        return not any(term in text and term not in activity_source for term in restricted)
+
+    return {
+        "pain_points": [item for item in template.get("pain_points", []) if allowed(item)],
+        "development_angles": [item for item in template.get("development_angles", []) if allowed(item)],
+        "showcase_cases": [
+            item for item in template.get("showcase_cases", [])
+            if allowed(" ".join(str(value) for value in item.values()))
+        ],
+        "common_ctas": template.get("common_ctas", []),
+    }
+
+
+def _industry_reference_block(reference: dict[str, list]) -> str:
+    angles = reference.get("development_angles", [])[:2]
+    cases = reference.get("showcase_cases", [])[:2]
+    if not angles and not cases:
+        return ""
+    lines = ["【產業參考】"]
+    lines.extend(f"• 開發切角：{item}" for item in angles)
+    lines.extend(
+        f"• 相關案例：{case.get('brand_name')}｜{case.get('use_cases')}"
+        for case in cases if case.get("brand_name")
+    )
+    return "\n".join(lines) + "\n\n"
 
 
 def _v1_subjects(scenario: str, brand: str, topic: str) -> list[str]:
@@ -499,7 +560,9 @@ def _generate_line_invitation(
     feature_tag = event.get("feature_tag") or _line_feature_tag(campaign)
     topic = campaign.get("topic") or campaign.get("summary") or campaign.get("name") or "品牌成長"
     question = _line_invitation_question(topic, industry)
-    pain_points = _line_industry_pain_points(industry, campaign)
+    pain_points = _line_industry_pain_points(
+        industry, campaign, lead.get("industry_context")
+    )
     activity_points = _campaign_points(campaign)
     if len(activity_points) < 3:
         return (
@@ -569,19 +632,10 @@ def _line_invitation_question(topic: str, industry: str) -> str:
 
 
 def _line_industry_pain_points(
-    industry: str, campaign: dict[str, Any]
+    industry: str, campaign: dict[str, Any], template: Optional[dict[str, Any]] = None
 ) -> list[str]:
-    template = next(
-        (item for item in load_industry_templates() if item.get("industry_name") == industry),
-        None,
-    )
     if template:
-        source = _activity_source(campaign, {})
-        restricted = ("AI", "LINE", "CRM", "Meta", "自動化")
-        points = [
-            item for item in template.get("pain_points", [])
-            if not any(term in item and term not in source for term in restricted)
-        ]
+        points = _safe_industry_reference(template, campaign)["pain_points"]
         if len(points) >= 4:
             return points[:4]
     return [
