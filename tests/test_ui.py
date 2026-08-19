@@ -47,10 +47,10 @@ class UiSmokeTests(unittest.TestCase):
         self.assertNotIn("信件大標 A（選填）", labels)
         self.assertNotIn("信件大標 B（選填）", labels)
         self.assertNotIn("信件大標 C（選填）", labels)
-        self.assertIn("問題式", labels)
-        self.assertIn("效益式", labels)
-        self.assertIn("趨勢 / 活動式", labels)
-        self.assertIn("自訂大標", labels)
+        self.assertNotIn("問題式", labels)
+        self.assertNotIn("效益式", labels)
+        self.assertNotIn("趨勢 / 活動式", labels)
+        self.assertNotIn("自訂大標", labels)
         self.assertIn("產生 3 個信件大標", [item.label for item in app.button])
         areas = [item.label for item in app.text_area]
         self.assertIn("活動一句話摘要", areas)
@@ -92,6 +92,8 @@ class UiSmokeTests(unittest.TestCase):
         ]
         self.assertEqual(len(set(first_subjects)), 3)
         self.assertTrue(all(subject for subject in first_subjects))
+        self.assertIn("選擇預設信件大標", [item.label for item in app.radio])
+        self.assertNotIn("自訂大標", [item.label for item in app.text_input])
         next(
             item for item in app.button if item.label == "重新產生 3 個建議"
         ).click().run(timeout=10)

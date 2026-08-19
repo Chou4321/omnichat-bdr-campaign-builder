@@ -380,49 +380,60 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
             st.session_state[generated_key] = True
             st.rerun()
 
-    subject_labels = ("問題式", "效益式", "趨勢 / 活動式")
-    subjects = []
-    for label, key_label, default in zip(subject_labels, ("a", "b", "c"), existing_subjects):
-        col_subject, col_copy = st.columns([5, 1])
-        subject = col_subject.text_input(
-            label, default, key=f"{prefix}_subject_{key_label}"
-        )
-        with col_copy:
-            st.caption("　")
-            _subject_copy_control(subject, f"copy_{prefix}_{key_label}")
-        subjects.append(subject)
-
     saved_selected = campaign.get("selected_subject", "")
-    selected_key = next(
-        (key for key, value in zip(("a", "b", "c"), subjects) if value and value == saved_selected),
-        "custom" if saved_selected else "a",
-    )
-    subject_options = ["a", "b", "c", "custom"]
-    selected_option = st.radio(
-        "預設信件大標",
-        subject_options,
-        index=subject_options.index(selected_key),
-        format_func=lambda option: {
-            "a": "建議 A｜問題式",
-            "b": "建議 B｜效益式",
-            "c": "建議 C｜趨勢 / 活動式",
-            "custom": "自訂大標",
-        }[option],
-        horizontal=True,
-        key=f"{prefix}_selected_subject_option",
-    )
-    custom_default = saved_selected if saved_selected and saved_selected not in subjects else ""
-    custom_subject = st.text_input(
-        "自訂大標",
-        custom_default,
-        key=f"{prefix}_custom_subject",
-        placeholder="需要時可自行輸入",
-    )
-    selected_subject = (
-        custom_subject.strip()
-        if selected_option == "custom"
-        else subjects[("a", "b", "c").index(selected_option)].strip()
-    )
+    subjects = list(existing_subjects)
+    selected_subject = saved_selected
+    if not has_generated_subjects:
+        st.caption("填妥活動資料後按下按鈕，系統才會顯示三個建議大標。")
+    else:
+        st.caption("以下內容由活動資料自動產生；可直接修改、複製並選為預設大標。")
+        subject_labels = ("問題式", "效益式", "趨勢 / 活動式")
+        subjects = []
+        for label, key_label, default in zip(
+            subject_labels, ("a", "b", "c"), existing_subjects
+        ):
+            col_subject, col_copy = st.columns([5, 1])
+            subject = col_subject.text_input(
+                label, default, key=f"{prefix}_subject_{key_label}"
+            )
+            with col_copy:
+                st.caption("　")
+                _subject_copy_control(subject, f"copy_{prefix}_{key_label}")
+            subjects.append(subject)
+
+        selected_key = next(
+            (
+                key for key, value in zip(("a", "b", "c"), subjects)
+                if value and value == saved_selected
+            ),
+            "custom" if saved_selected else "a",
+        )
+        subject_options = ["a", "b", "c", "custom"]
+        selected_option = st.radio(
+            "選擇預設信件大標",
+            subject_options,
+            index=subject_options.index(selected_key),
+            format_func=lambda option: {
+                "a": "建議 A｜問題式",
+                "b": "建議 B｜效益式",
+                "c": "建議 C｜趨勢 / 活動式",
+                "custom": "自訂大標",
+            }[option],
+            horizontal=True,
+            key=f"{prefix}_selected_subject_option",
+        )
+        if selected_option == "custom":
+            custom_default = (
+                saved_selected if saved_selected and saved_selected not in subjects else ""
+            )
+            selected_subject = st.text_input(
+                "自訂大標",
+                custom_default,
+                key=f"{prefix}_custom_subject",
+                placeholder="輸入這封活動預設使用的大標",
+            ).strip()
+        else:
+            selected_subject = subjects[("a", "b", "c").index(selected_option)].strip()
     image = st.file_uploader(
         "活動 Banner（選填）",
         type=["png", "jpg", "jpeg", "webp"],
