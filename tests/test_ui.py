@@ -44,13 +44,62 @@ class UiSmokeTests(unittest.TestCase):
         self.assertIn("合作單位 / 講者", labels)
         self.assertIn("活動重點 1", labels)
         self.assertIn("活動重點 4", labels)
-        self.assertIn("信件大標 A（選填）", labels)
+        self.assertNotIn("信件大標 A（選填）", labels)
+        self.assertNotIn("信件大標 B（選填）", labels)
+        self.assertNotIn("信件大標 C（選填）", labels)
+        self.assertIn("問題式", labels)
+        self.assertIn("效益式", labels)
+        self.assertIn("趨勢 / 活動式", labels)
+        self.assertIn("自訂大標", labels)
+        self.assertIn("產生 3 個信件大標", [item.label for item in app.button])
         areas = [item.label for item in app.text_area]
         self.assertIn("活動一句話摘要", areas)
         self.assertIn("活動介紹", areas)
         self.assertNotIn("Landing Page 內容", areas)
         self.assertNotIn("活動議程", areas)
         self.assertNotIn("複製活動", [item.label for item in app.button])
+
+    def test_activity_subject_suggestions_generate_and_rotate(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        create_inputs = {}
+        for item in app.text_input:
+            create_inputs.setdefault(item.label, item)
+        for label, value in {
+            "活動名稱 *": "測試食品活動",
+            "活動重點 1": "掌握食品產業趨勢",
+            "活動重點 2": "建立會員數據策略",
+            "活動重點 3": "精準分眾提升互動",
+            "活動重點 4": "食品品牌案例分享",
+        }.items():
+            create_inputs[label].set_value(value)
+        create_areas = {}
+        for item in app.text_area:
+            create_areas.setdefault(item.label, item)
+        create_areas["活動一句話摘要"].set_value(
+            "從會員數據到分眾行銷，建立食品品牌持續成長模式。"
+        )
+        create_areas["活動介紹"].set_value(
+            "分享食品產業趨勢、會員數據與分眾行銷實務。"
+        )
+        next(
+            item for item in app.button if item.label == "產生 3 個信件大標"
+        ).click().run(timeout=10)
+        self.assertFalse(app.exception)
+        first_subjects = [
+            next(item for item in app.text_input if item.label == label).value
+            for label in ("問題式", "效益式", "趨勢 / 活動式")
+        ]
+        self.assertEqual(len(set(first_subjects)), 3)
+        self.assertTrue(all(subject for subject in first_subjects))
+        next(
+            item for item in app.button if item.label == "重新產生 3 個建議"
+        ).click().run(timeout=10)
+        second_subjects = [
+            next(item for item in app.text_input if item.label == label).value
+            for label in ("問題式", "效益式", "趨勢 / 活動式")
+        ]
+        self.assertNotEqual(first_subjects, second_subjects)
 
     def test_email_builder_v1_has_only_simplified_fields(self):
         app_path = Path(__file__).parents[1] / "app.py"

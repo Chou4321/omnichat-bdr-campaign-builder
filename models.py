@@ -50,6 +50,12 @@ class Campaign:
     activity_point_2: str = ""
     activity_point_3: str = ""
     activity_point_4: str = ""
+    subject_a: str = ""
+    subject_b: str = ""
+    subject_c: str = ""
+    selected_subject: str = ""
+    subject_generation_round: int = 0
+    # Legacy subject fields remain readable but are no longer shown in the UI.
     email_title_a: str = ""
     email_title_b: str = ""
     email_title_c: str = ""

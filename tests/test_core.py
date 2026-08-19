@@ -7,6 +7,7 @@ from generators import (
     generate_banner,
     generate_email,
     generate_line,
+    generate_subject_suggestions,
     validate_cold_email_sources,
 )
 from models import EMAIL_SCENARIOS, LINE_SCENARIOS
@@ -76,6 +77,22 @@ class StoreTests(unittest.TestCase):
             self.assertTrue(delete_campaign("c1", path))
             self.assertEqual(load_campaigns(path), [])
 
+    def test_campaign_subject_suggestions_persist(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "campaigns.json"
+            record = {
+                "id": "subject-test",
+                "name": "測試活動",
+                "subject_a": "問題式大標",
+                "subject_b": "效益式大標",
+                "subject_c": "趨勢式大標",
+                "selected_subject": "效益式大標",
+            }
+            save_campaign(record, path)
+            reloaded = load_campaigns(path)[0]
+            self.assertEqual(reloaded["subject_a"], "問題式大標")
+            self.assertEqual(reloaded["selected_subject"], "效益式大標")
+
     def test_food_industry_knowledge_exists(self):
         template = load_industry_templates()[0]
         self.assertEqual(template["industry_name"], "食品 / 伴手禮")
@@ -122,10 +139,49 @@ class GeneratorTests(unittest.TestCase):
     def test_email(self):
         subjects, body, cta = generate_email(CAMPAIGN, "活動前提醒", LEAD)
         self.assertEqual(len(subjects), 3)
-        self.assertIn("活動前提醒", subjects[0])
+        self.assertEqual(subjects[0], CAMPAIGN["email_title_a"])
         self.assertIn("王小姐", body)
         self.assertIn(CAMPAIGN["summary"], body)
         self.assertIn("如需協助", cta)
+
+    def test_rule_based_subject_suggestions_are_distinct_and_grounded(self):
+        campaign = {
+            **CAMPAIGN,
+            "name": "食品產業成長新曲線",
+            "primary_industry": "食品 / 伴手禮",
+            "summary": "從會員數據到分眾行銷，建立食品品牌持續成長模式。",
+            "introduction": "分享食品產業趨勢、會員數據與分眾行銷實務。",
+            "activity_point_1": "掌握食品產業趨勢",
+            "activity_point_2": "建立會員數據策略",
+            "activity_point_3": "精準分眾提升互動",
+            "activity_point_4": "食品品牌案例分享",
+        }
+        subjects = generate_subject_suggestions(campaign, 0)
+        self.assertEqual(len(subjects), 3)
+        self.assertEqual(len(set(subjects)), 3)
+        self.assertTrue(subjects[0].endswith("？"))
+        self.assertTrue(subjects[2].startswith("【食品產業成長新曲線】"))
+        self.assertTrue(all(len(subject) <= 32 for subject in subjects))
+        combined = " ".join(subjects)
+        for unsupported in ("AI", "LINE", "CRM", "Meta", "自動化"):
+            self.assertNotIn(unsupported, combined)
+
+    def test_subject_regeneration_rotates_safe_patterns(self):
+        versions = [generate_subject_suggestions(CAMPAIGN, index) for index in range(3)]
+        for subject_type in range(3):
+            self.assertEqual(len({subjects[subject_type] for subjects in versions}), 3)
+        source = " ".join(str(value) for value in CAMPAIGN.values())
+        for subjects in versions:
+            for unsupported in ("AI", "LINE", "CRM", "Meta", "自動化"):
+                if unsupported not in source:
+                    self.assertNotIn(unsupported, " ".join(subjects))
+
+    def test_selected_subject_is_the_email_subject(self):
+        selected = "食品品牌如何建立會員成長策略？"
+        subjects, _, _ = generate_email(
+            CAMPAIGN, "陌生開發邀約", {**LEAD, "selected_subject": selected}
+        )
+        self.assertEqual(subjects, [selected])
 
     def test_line(self):
         campaign = {

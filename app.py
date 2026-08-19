@@ -11,6 +11,7 @@ from generators import (
     generate_banner,
     generate_email,
     generate_line,
+    generate_subject_suggestions,
 )
 from models import Campaign, EMAIL_SCENARIOS, LINE_SCENARIOS
 from line_contact_finder import (
@@ -195,6 +196,34 @@ def copyable_line_output(state_key: str) -> None:
     )
 
 
+def _subject_copy_control(value: str, control_id: str) -> None:
+    text_json = json.dumps(value, ensure_ascii=False)
+    components.html(
+        f"""
+        <button id="{control_id}" style="border:1px solid #d0d5dd;border-radius:8px;
+          background:white;padding:7px 12px;cursor:pointer;font-size:14px;width:100%;">
+          複製
+        </button>
+        <script>
+          document.getElementById('{control_id}').onclick = async () => {{
+            try {{
+              await navigator.clipboard.writeText({text_json});
+            }} catch (error) {{
+              const area = document.createElement('textarea');
+              area.value = {text_json};
+              document.body.appendChild(area);
+              area.select();
+              document.execCommand('copy');
+              area.remove();
+            }}
+            document.getElementById('{control_id}').textContent = '已複製';
+          }};
+        </script>
+        """,
+        height=42,
+    )
+
+
 def line_contact_finder() -> None:
     st.header("LINE 找窗口")
     st.caption("透過品牌官方 LINE 找到行銷、會員經營、品牌經營或數位行銷相關窗口。")
@@ -311,14 +340,89 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
         )
         for index in range(1, 5)
     ]
-    email_titles = [
-        st.text_input(
-            f"信件大標 {label}（選填）",
-            campaign.get(f"email_title_{label.lower()}", ""),
-            key=f"{prefix}_title_{label.lower()}",
+    st.markdown("### 信件大標建議")
+    existing_subjects = [
+        st.session_state.get(
+            f"{prefix}_subject_{label}",
+            campaign.get(f"subject_{label}") or campaign.get(f"email_title_{label}", ""),
         )
-        for label in ("A", "B", "C")
+        for label in ("a", "b", "c")
     ]
+    round_key = f"{prefix}_subject_generation_round"
+    if round_key not in st.session_state:
+        st.session_state[round_key] = int(campaign.get("subject_generation_round", 0))
+    generated_key = f"{prefix}_subjects_generated"
+    has_generated_subjects = bool(
+        any(existing_subjects) or st.session_state.get(generated_key)
+    )
+    generation_label = (
+        "重新產生 3 個建議" if has_generated_subjects else "產生 3 個信件大標"
+    )
+    generate_subjects = st.form_submit_button(generation_label)
+    if generate_subjects:
+        if not name.strip() or not summary.strip() or not introduction.strip() or not all(
+            point.strip() for point in points
+        ):
+            st.error("請先填寫活動名稱、活動一句話摘要、活動介紹與 4 個活動重點。")
+        else:
+            if has_generated_subjects:
+                st.session_state[round_key] = (st.session_state[round_key] + 1) % 3
+            generated = generate_subject_suggestions({
+                "name": name.strip(),
+                "event_date": event_date.isoformat(),
+                "primary_industry": primary_industry,
+                "summary": summary.strip(),
+                "introduction": introduction.strip(),
+                **{f"activity_point_{index}": points[index - 1].strip() for index in range(1, 5)},
+            }, st.session_state[round_key])
+            for label, value in zip(("a", "b", "c"), generated):
+                st.session_state[f"{prefix}_subject_{label}"] = value
+            st.session_state[generated_key] = True
+            st.rerun()
+
+    subject_labels = ("問題式", "效益式", "趨勢 / 活動式")
+    subjects = []
+    for label, key_label, default in zip(subject_labels, ("a", "b", "c"), existing_subjects):
+        col_subject, col_copy = st.columns([5, 1])
+        subject = col_subject.text_input(
+            label, default, key=f"{prefix}_subject_{key_label}"
+        )
+        with col_copy:
+            st.caption("　")
+            _subject_copy_control(subject, f"copy_{prefix}_{key_label}")
+        subjects.append(subject)
+
+    saved_selected = campaign.get("selected_subject", "")
+    selected_key = next(
+        (key for key, value in zip(("a", "b", "c"), subjects) if value and value == saved_selected),
+        "custom" if saved_selected else "a",
+    )
+    subject_options = ["a", "b", "c", "custom"]
+    selected_option = st.radio(
+        "預設信件大標",
+        subject_options,
+        index=subject_options.index(selected_key),
+        format_func=lambda option: {
+            "a": "建議 A｜問題式",
+            "b": "建議 B｜效益式",
+            "c": "建議 C｜趨勢 / 活動式",
+            "custom": "自訂大標",
+        }[option],
+        horizontal=True,
+        key=f"{prefix}_selected_subject_option",
+    )
+    custom_default = saved_selected if saved_selected and saved_selected not in subjects else ""
+    custom_subject = st.text_input(
+        "自訂大標",
+        custom_default,
+        key=f"{prefix}_custom_subject",
+        placeholder="需要時可自行輸入",
+    )
+    selected_subject = (
+        custom_subject.strip()
+        if selected_option == "custom"
+        else subjects[("a", "b", "c").index(selected_option)].strip()
+    )
     image = st.file_uploader(
         "活動 Banner（選填）",
         type=["png", "jpg", "jpeg", "webp"],
@@ -345,9 +449,11 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
         "activity_point_2": points[1].strip(),
         "activity_point_3": points[2].strip(),
         "activity_point_4": points[3].strip(),
-        "email_title_a": email_titles[0].strip(),
-        "email_title_b": email_titles[1].strip(),
-        "email_title_c": email_titles[2].strip(),
+        "subject_a": subjects[0].strip(),
+        "subject_b": subjects[1].strip(),
+        "subject_c": subjects[2].strip(),
+        "selected_subject": selected_subject,
+        "subject_generation_round": st.session_state[round_key],
         "image_path": campaign.get("image_path", ""),
         # Keep legacy readers compatible without duplicating UI fields.
         "highlights": introduction.strip(),
@@ -391,7 +497,7 @@ def campaign_manager() -> None:
     st.caption("活動資料中心｜儲存後由 Email 與 LINE 直接共用。")
     campaigns = load_campaigns()
     with st.expander("＋ 新增活動", expanded=not campaigns):
-        with st.form("campaign_create_form", clear_on_submit=True):
+        with st.form("campaign_create_form", clear_on_submit=False):
             values, image = _campaign_form_fields("create")
             submitted = st.form_submit_button("儲存活動", type="primary")
         if submitted:
@@ -468,6 +574,45 @@ def email_builder_v1() -> None:
 
     st.subheader("Step 2｜選擇 Email 情境")
     scenario = st.selectbox("情境", EMAIL_SCENARIOS, key="Email_scenario")
+    saved_subjects = [
+        campaign.get(f"subject_{label}") or campaign.get(f"email_title_{label}", "")
+        for label in ("a", "b", "c")
+    ]
+    subject_map = {
+        label: subject for label, subject in zip(("a", "b", "c"), saved_subjects) if subject
+    }
+    subject_options = [*subject_map, "custom"]
+    saved_selected = campaign.get("selected_subject", "")
+    default_subject_option = next(
+        (label for label, subject in subject_map.items() if subject == saved_selected),
+        "custom" if saved_selected else (next(iter(subject_map), "custom")),
+    )
+    st.markdown("**信件大標：**")
+    if not subject_map:
+        st.info("此活動尚未產生信件大標建議，可到「活動管理」產生後儲存。")
+    selected_subject_option = st.radio(
+        "選擇本封 Email Subject",
+        subject_options,
+        index=subject_options.index(default_subject_option),
+        format_func=lambda option: (
+            f"建議 {option.upper()}｜{subject_map[option]}"
+            if option in subject_map else "自訂"
+        ),
+        key=f"Email_subject_option_{campaign['id']}",
+    )
+    custom_subject_default = (
+        saved_selected if saved_selected and saved_selected not in subject_map.values() else ""
+    )
+    custom_subject = st.text_input(
+        "自訂 Subject",
+        custom_subject_default,
+        key=f"Email_custom_subject_{campaign['id']}",
+    ) if selected_subject_option == "custom" else ""
+    selected_subject = (
+        custom_subject.strip()
+        if selected_subject_option == "custom"
+        else subject_map[selected_subject_option]
+    )
     st.subheader("Step 3｜品牌資訊")
     brand = st.text_input("品牌名稱 *", key="Email_brand")
     contact = st.text_input("窗口（選填）", key="Email_contact")
@@ -492,11 +637,16 @@ def email_builder_v1() -> None:
                     "contact": contact.strip(),
                     "observation": observation.strip(),
                     "industry_context": industry_context,
+                    "selected_subject": selected_subject,
                 },
             )
+            if selected_subject and selected_subject != campaign.get("selected_subject", ""):
+                update_campaign(
+                    campaign["id"], {**campaign, "selected_subject": selected_subject}
+                )
             st.session_state["Email_result"] = (
-                "信件主旨 3 版：\n"
-                + "\n".join(f"{index}. {subject}" for index, subject in enumerate(subjects, 1))
+                "信件主旨：\n"
+                + (subjects[0] if subjects else selected_subject)
                 + f"\n\nEmail 內文：\n{body}\n\nCTA：\n{cta}"
             )
 

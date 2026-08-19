@@ -28,12 +28,86 @@ def _campaign_summary(campaign: dict[str, Any]) -> str:
 
 def _campaign_titles(campaign: dict[str, Any], fallback: list[str]) -> list[str]:
     titles = [
-        campaign.get("email_title_a", "").strip(),
-        campaign.get("email_title_b", "").strip(),
-        campaign.get("email_title_c", "").strip(),
+        (campaign.get("subject_a") or campaign.get("email_title_a", "")).strip(),
+        (campaign.get("subject_b") or campaign.get("email_title_b", "")).strip(),
+        (campaign.get("subject_c") or campaign.get("email_title_c", "")).strip(),
     ]
     titles = [title for title in titles if title]
     return titles or fallback
+
+
+def generate_subject_suggestions(
+    campaign: dict[str, Any], variant: int = 0
+) -> tuple[str, str, str]:
+    """Create three grounded B2B subjects using campaign text only."""
+    name = (campaign.get("name") or "活動交流").strip()
+    industry = _subject_industry(_campaign_industry(campaign))
+    summary = (campaign.get("summary") or "").strip()
+    introduction = (campaign.get("introduction") or "").strip()
+    source_phrases = [
+        (campaign.get(f"activity_point_{index}") or "").strip()
+        for index in range(1, 5)
+        if (campaign.get(f"activity_point_{index}") or "").strip()
+    ]
+    if not source_phrases:
+        source_phrases = _intro_points(summary or introduction)
+    first = _subject_phrase(source_phrases[0] if source_phrases else name)
+    second = _subject_phrase(
+        source_phrases[1] if len(source_phrases) > 1 else (summary or name)
+    )
+    core = first
+    event_date = _subject_date(campaign.get("event_date", ""))
+    style = variant % 3
+
+    questions = [
+        f"{industry}如何掌握{first}？",
+        f"{industry}下一步，{first}的關鍵在哪？",
+        f"如何從{first}走向{second}？",
+    ]
+    benefits = [
+        f"從{first}到{second}｜{industry}實戰交流",
+        f"{first} × {second}｜{industry}交流",
+        f"{industry}實戰交流｜{first}與{second}",
+    ]
+    trends = [
+        f"【{name}】{core}",
+        f"【{event_date} {industry}交流】{first}" if event_date else f"【{industry}交流】{first}",
+        f"【{name}】{second}",
+    ]
+    return tuple(
+        _subject_clip(value) for value in (questions[style], benefits[style], trends[style])
+    )
+
+
+def _subject_industry(value: str) -> str:
+    cleaned = value.replace("等品牌", "").replace("品牌", "").strip(" 、，,")
+    cleaned = cleaned.replace(" / ", ",").replace("/", ",").replace("、", ",")
+    return next((item.strip() for item in cleaned.split(",") if item.strip()), "產業")
+
+
+def _subject_phrase(value: str) -> str:
+    phrase = " ".join(value.replace("\n", " ").split()).strip("。！？!?，,；;｜ ")
+    for separator in ("。", "！", "!", "？", "?", "，", ",", "；", ";", "｜"):
+        phrase = phrase.split(separator, 1)[0].strip()
+    for prefix in ("本次活動", "如何", "透過", "運用", "掌握", "建立", "提升", "深化", "分享"):
+        if phrase.startswith(prefix) and len(phrase) > len(prefix) + 2:
+            phrase = phrase[len(prefix):].strip()
+            break
+    return phrase[:14].rstrip("。！？!?，,；;｜ ") or "活動核心議題"
+
+
+def _subject_date(value: str) -> str:
+    parts = str(value).split("-")
+    if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+        return f"{int(parts[1])}/{int(parts[2])}"
+    return str(value).strip()
+
+
+def _subject_clip(value: str) -> str:
+    if len(value) <= 32:
+        return value
+    suffix = "？" if value.endswith("？") else ""
+    return value[: 32 - len(suffix)].rstrip("，、；;｜ ") + suffix
 
 
 def _campaign_context(campaign: dict[str, Any]) -> str:
@@ -64,7 +138,10 @@ def _generate_v1_email(
     observation = (lead.get("observation") or "").strip()
     observation_block = f"\n\n{observation}" if observation else ""
     topic = campaign.get("name") or _intro_topic(introduction)
-    subjects = _v1_subjects(scenario, brand, topic)
+    subjects = _campaign_titles(campaign, _v1_subjects(scenario, brand, topic))
+    selected_subject = (lead.get("selected_subject") or "").strip()
+    if selected_subject:
+        subjects = [selected_subject]
     points = _campaign_points(campaign) or _intro_points(introduction)
     points_block = "\n".join(f"• {point}" for point in points)
     feature = campaign.get("summary") or _intro_feature(introduction)
