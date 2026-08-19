@@ -125,6 +125,8 @@ def _generate_v1_email(
         "自主報名確認": "歡迎回覆您最關注的活動內容。",
         "一般開發信": "歡迎直接回覆此信，安排後續交流。",
     }[scenario]
+    if industry_reference.get("common_ctas"):
+        cta = industry_reference["common_ctas"][0]
     body = f"{templates[scenario]}{banner_block}"
     return subjects, body, cta
 
@@ -194,24 +196,34 @@ def _safe_industry_reference(
 
     return {
         "pain_points": [item for item in template.get("pain_points", []) if allowed(item)],
+        "omnichat_applications": [
+            item for item in (
+                template.get("omnichat_applications")
+                or template.get("omnichat_scenarios", [])
+            ) if allowed(item)
+        ],
         "development_angles": [item for item in template.get("development_angles", []) if allowed(item)],
         "showcase_cases": [
             item for item in template.get("showcase_cases", [])
-            if allowed(" ".join(str(value) for value in item.values()))
+            if item.get("public", True)
+            and allowed(" ".join(str(value) for value in item.values()))
         ],
-        "common_ctas": template.get("common_ctas", []),
+        "common_ctas": [item for item in template.get("common_ctas", []) if allowed(item)],
+        "cautions": template.get("cautions", []),
     }
 
 
 def _industry_reference_block(reference: dict[str, list]) -> str:
     angles = reference.get("development_angles", [])[:2]
+    applications = reference.get("omnichat_applications", [])[:2]
     cases = reference.get("showcase_cases", [])[:2]
-    if not angles and not cases:
+    if not angles and not applications and not cases:
         return ""
     lines = ["【產業參考】"]
     lines.extend(f"• 開發切角：{item}" for item in angles)
+    lines.extend(f"• Omnichat 應用：{item}" for item in applications)
     lines.extend(
-        f"• 相關案例：{case.get('brand_name')}｜{case.get('use_cases')}"
+        f"• 相關案例：{case.get('brand_name')}｜{case.get('use_cases')}｜{case.get('key_points', '')}"
         for case in cases if case.get("brand_name")
     )
     return "\n".join(lines) + "\n\n"
@@ -560,9 +572,15 @@ def _generate_line_invitation(
     feature_tag = event.get("feature_tag") or _line_feature_tag(campaign)
     topic = campaign.get("topic") or campaign.get("summary") or campaign.get("name") or "品牌成長"
     question = _line_invitation_question(topic, industry)
-    pain_points = _line_industry_pain_points(
-        industry, campaign, lead.get("industry_context")
-    )
+    selected_reference = _safe_industry_reference(lead.get("industry_context"), campaign)
+    pain_points = _line_industry_pain_points(industry, campaign, lead.get("industry_context"))
+    reference_lines = []
+    if selected_reference.get("development_angles"):
+        reference_lines.append(f"💡 {selected_reference['development_angles'][0]}")
+    if selected_reference.get("showcase_cases"):
+        case = selected_reference["showcase_cases"][0]
+        reference_lines.append(f"📌 案例：{case.get('brand_name')}｜{case.get('use_cases')}")
+    reference_block = f"\n\n{chr(10).join(reference_lines)}" if reference_lines else ""
     activity_points = _campaign_points(campaign)
     if len(activity_points) < 3:
         return (
@@ -585,7 +603,7 @@ def _generate_line_invitation(
 
 🚀 {question}
 
-{summary}
+{summary}{reference_block}
 
 如果您正關注：
 
@@ -636,14 +654,15 @@ def _line_industry_pain_points(
 ) -> list[str]:
     if template:
         points = _safe_industry_reference(template, campaign)["pain_points"]
-        if len(points) >= 4:
-            return points[:4]
-    return [
+    else:
+        points = []
+    defaults = [
         "新客互動難以持續累積",
         "會員資料缺乏清楚整理",
         "顧客溝通難以有效分眾",
         "回購與再行銷難以延續",
     ]
+    return list(dict.fromkeys([*points, *defaults]))[:4]
 
 
 def generate_banner(campaign: dict[str, Any]) -> dict[str, str]:

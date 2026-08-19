@@ -2,7 +2,7 @@
   {
     "id": "food-gift",
     "industry_name": "食品 / 伴手禮",
-    "description": "食品、伴手禮與節慶禮贈品牌的開發經驗資料。",
+    "description": "以食品、伴手禮、烘焙、節慶送禮等品牌為主，常見需求包含會員回購、節慶禮贈、分眾行銷與售後關懷。",
     "brand_scenarios": [
       "顧客輪廓建立",
       "節慶禮贈推播",
@@ -11,40 +11,99 @@
       "定期回購提醒",
       "會員分眾",
       "再行銷",
-      "送禮 / 轉介紹"
+      "送禮轉介"
     ],
     "pain_points": [
-      "節慶檔期取得大量新客，但後續回購有限",
-      "LINE、官網與門市顧客資料分散",
-      "好友或會員持續累積，但缺乏清楚分眾",
-      "大量群發內容與顧客需求連結不足",
-      "出貨與售後客服占用大量人力",
-      "缺乏自動化的回購與會員關懷流程"
+      "節慶檔期新客多，但後續回購有限",
+      "LINE / 官網 / 門市顧客資料分散",
+      "好友增加，但缺乏清楚分眾",
+      "大量群發與顧客需求連結不足",
+      "售後客服占用大量人力",
+      "缺乏定期回購與會員關懷流程"
     ],
     "development_angles": [
-      "會員回購",
-      "節慶禮贈",
-      "私域經營",
-      "會員分眾"
+      "檔期後新客如何轉成回購會員",
+      "如何運用會員數據做分眾",
+      "如何深化會員關係",
+      "如何減少大量群發"
     ],
-    "omnichat_scenarios": [
+    "omnichat_applications": [
       "會員整合",
-      "分眾經營",
+      "顧客標籤",
+      "會員分眾",
       "自動化旅程",
-      "顧客互動",
-      "客服效率"
+      "節慶推播",
+      "出貨通知",
+      "售後關懷",
+      "回購提醒"
     ],
     "showcase_cases": [
       {
         "brand_name": "簡單李",
         "category": "烘焙伴手禮",
-        "summary": "食品伴手禮品牌案例",
-        "use_cases": "會員經營 / 節慶回購"
+        "use_cases": "會員經營 / 節慶回購",
+        "key_points": "會員分眾、回購經營",
+        "public": true
+      },
+      {
+        "brand_name": "鴻鼎菓子",
+        "category": "食品伴手禮",
+        "use_cases": "節慶禮贈 / 會員經營",
+        "key_points": "節慶顧客經營",
+        "public": true
+      },
+      {
+        "brand_name": "台灣牧場",
+        "category": "農產 / 生鮮",
+        "use_cases": "會員經營",
+        "key_points": "品牌顧客互動",
+        "public": true
+      },
+      {
+        "brand_name": "無毒農",
+        "category": "農產 / 生鮮",
+        "use_cases": "顧客經營",
+        "key_points": "會員關係深化",
+        "public": true
+      },
+      {
+        "brand_name": "京盛宇",
+        "category": "茶",
+        "use_cases": "會員經營",
+        "key_points": "顧客分眾",
+        "public": true
+      },
+      {
+        "brand_name": "好好生醫",
+        "category": "保健",
+        "use_cases": "定期回購",
+        "key_points": "回購提醒",
+        "public": true
+      },
+      {
+        "brand_name": "三得利",
+        "category": "保健",
+        "use_cases": "會員經營",
+        "key_points": "顧客關係經營",
+        "public": true
+      },
+      {
+        "brand_name": "超比食品",
+        "category": "食品製造 B2B",
+        "use_cases": "B2B 顧客經營",
+        "key_points": "客戶互動",
+        "public": true
       }
     ],
     "common_ctas": [
       "若您方便，歡迎直接回覆此信安排交流。",
       "歡迎分享方便時段，我很樂意提供相關案例參考。"
+    ],
+    "cautions": [
+      "活動未提 AI，不可自行加入 AI",
+      "活動未提 LINE，不可自行加入 LINE",
+      "未確認案例時，不可亂說某品牌使用某功能",
+      "品牌觀察留白時，不可自行虛構品牌現況"
     ],
     "showcases": {
       "食品伴手禮": ["星球工坊爆米花", "簡單李", "鴻鼎菓子"],

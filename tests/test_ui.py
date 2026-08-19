@@ -69,7 +69,7 @@ class UiSmokeTests(unittest.TestCase):
         self.assertNotIn("活動 Landing Page 內容", text_areas)
         self.assertNotIn("活動議程", text_areas)
         self.assertEqual(app.selectbox[0].label, "選擇活動")
-        self.assertIn("是否引用產業資料庫", [item.label for item in app.checkbox])
+        self.assertIn("引用產業別資料庫", [item.label for item in app.checkbox])
 
     def test_email_builder_v1_has_banner_and_generate_button(self):
         app_path = Path(__file__).parents[1] / "app.py"
@@ -78,6 +78,32 @@ class UiSmokeTests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertEqual(len(app.get("file_uploader")), 0)
         self.assertIn("產生 Email 信件", [item.label for item in app.button])
+
+    def test_email_industry_reference_is_optional_and_selective(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
+        self.assertNotIn("選擇引用產業", [item.label for item in app.selectbox])
+        checkbox = next(item for item in app.checkbox if item.label == "引用產業別資料庫")
+        checkbox.set_value(True).run(timeout=10)
+        self.assertIn("選擇引用產業", [item.label for item in app.selectbox])
+        content_selector = next(
+            item for item in app.multiselect if item.label == "選擇引用內容"
+        )
+        self.assertEqual(content_selector.options, [
+            "常見痛點", "Omnichat 應用", "Showcase", "開發切角", "CTA"
+        ])
+
+    def test_line_industry_reference_is_limited_to_one_each(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        app.sidebar.radio[0].set_value("LINE 邀約訊息").run(timeout=10)
+        checkbox = next(item for item in app.checkbox if item.label == "引用產業別資料庫")
+        checkbox.set_value(True).run(timeout=10)
+        labels = [item.label for item in app.selectbox]
+        self.assertIn("引用 1 個痛點", labels)
+        self.assertIn("引用 1 個開發切角", labels)
+        self.assertIn("引用 1 個 Showcase", labels)
 
     def test_general_email_allows_empty_activity_intro(self):
         app_path = Path(__file__).parents[1] / "app.py"
@@ -117,9 +143,12 @@ class UiSmokeTests(unittest.TestCase):
         self.assertIn("產業說明", areas)
         self.assertIn("常見痛點（每行一筆）", areas)
         self.assertIn("常見開發切角（每行一筆）", areas)
-        self.assertIn("Omnichat 可應用情境（每行一筆）", areas)
+        self.assertIn("Omnichat 對應應用（每行一筆）", areas)
         self.assertIn("Showcase / 品牌案例", areas)
         self.assertIn("常用 CTA（每行一筆）", areas)
+        self.assertIn("常見經營情境（每行一筆）", areas)
+        self.assertIn("禁用 / 注意事項（每行一筆）", areas)
+        self.assertIn("複製資料", [item.label for item in app.button])
 
 
 if __name__ == "__main__":

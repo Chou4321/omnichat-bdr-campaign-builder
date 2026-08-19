@@ -13,10 +13,13 @@ from models import EMAIL_SCENARIOS, LINE_SCENARIOS
 from storage import (
     JsonStore,
     delete_campaign,
+    delete_industry_template,
     load_campaigns,
     load_industry_templates,
     save_campaign,
+    save_industry_template,
     update_campaign,
+    update_industry_template,
 )
 
 
@@ -78,6 +81,41 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(template["industry_name"], "食品 / 伴手禮")
         self.assertIn("星球工坊爆米花", template["showcases"]["食品伴手禮"])
         self.assertGreaterEqual(len(template["pain_points"]), 6)
+        self.assertEqual(len(template["showcase_cases"]), 8)
+        self.assertTrue(all("public" in case for case in template["showcase_cases"]))
+        self.assertGreaterEqual(len(template["omnichat_applications"]), 8)
+        self.assertGreaterEqual(len(template["cautions"]), 4)
+
+    def test_industry_knowledge_persists_crud(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "industries.json"
+            record = {
+                "id": "food",
+                "industry_name": "食品 / 伴手禮",
+                "pain_points": ["檔期後回購有限", "會員資料分散"],
+                "showcase_cases": [{
+                    "brand_name": "簡單李",
+                    "category": "烘焙伴手禮",
+                    "use_cases": "節慶回購",
+                    "key_points": "會員分眾",
+                    "public": True,
+                }],
+            }
+            save_industry_template(record, path)
+            reloaded = load_industry_templates(path)[0]
+            self.assertEqual(reloaded["pain_points"][0], "檔期後回購有限")
+            self.assertEqual(reloaded["showcase_cases"][0]["brand_name"], "簡單李")
+
+            self.assertTrue(update_industry_template("food", {
+                "pain_points": ["會員資料分散"],
+                "showcase_cases": [],
+            }, path))
+            reloaded = load_industry_templates(path)[0]
+            self.assertEqual(reloaded["pain_points"], ["會員資料分散"])
+            self.assertEqual(reloaded["showcase_cases"], [])
+
+            self.assertTrue(delete_industry_template("food", path))
+            self.assertEqual(load_industry_templates(path), [])
 
 
 class GeneratorTests(unittest.TestCase):
@@ -203,19 +241,42 @@ class GeneratorTests(unittest.TestCase):
         template = {
             "pain_points": ["節慶新客後續回購有限", "LINE 好友缺乏分眾"],
             "development_angles": ["會員回購", "LINE 分眾"],
+            "omnichat_applications": ["會員分眾", "AI 客服"],
             "showcase_cases": [{
                 "brand_name": "簡單李", "category": "烘焙伴手禮",
-                "summary": "會員案例", "use_cases": "會員回購",
+                "key_points": "會員案例", "use_cases": "會員回購",
+                "public": True,
             }],
-            "common_ctas": [],
+            "common_ctas": ["歡迎回覆方便時段，我再協助安排。"],
         }
         lead = {**LEAD, "industry_context": template}
-        _, referenced, _ = generate_email(CAMPAIGN, "陌生開發邀約", lead)
+        _, referenced, cta = generate_email(CAMPAIGN, "陌生開發邀約", lead)
         _, plain, _ = generate_email(CAMPAIGN, "陌生開發邀約", LEAD)
         self.assertIn("節慶新客後續回購有限", referenced)
         self.assertIn("簡單李", referenced)
+        self.assertIn("會員分眾", referenced)
+        self.assertEqual(cta, "歡迎回覆方便時段，我再協助安排。")
         self.assertNotIn("LINE 好友缺乏分眾", referenced)
+        self.assertNotIn("AI 客服", referenced)
         self.assertNotIn("節慶新客後續回購有限", plain)
+
+    def test_line_industry_reference_is_short_and_opt_in(self):
+        context = {
+            "pain_points": ["節慶新客後續回購有限"],
+            "development_angles": ["檔期後新客如何轉成回購會員"],
+            "showcase_cases": [{
+                "brand_name": "簡單李", "use_cases": "會員經營 / 節慶回購",
+                "public": True,
+            }],
+        }
+        referenced = generate_line(
+            CAMPAIGN, "活動邀約", {**LEAD, "industry_context": context}
+        )
+        plain = generate_line(CAMPAIGN, "活動邀約", LEAD)
+        self.assertIn("節慶新客後續回購有限", referenced)
+        self.assertIn("檔期後新客如何轉成回購會員", referenced)
+        self.assertIn("簡單李", referenced)
+        self.assertNotIn("簡單李", plain)
 
 
 if __name__ == "__main__":

@@ -68,17 +68,81 @@ def campaign_selector(key: str) -> Optional[dict]:
     return next(item for item in campaigns if item["id"] == selected_id)
 
 
-def _selected_industry_context(campaign: dict, enabled: bool) -> Optional[dict]:
+def industry_reference_selector(campaign: dict, channel: str) -> Optional[dict]:
+    enabled = st.checkbox(
+        "引用產業別資料庫", value=False, key=f"{channel}_use_industry"
+    )
     if not enabled:
         return None
-    industry_name = campaign.get("primary_industry") or campaign.get("suitable_industries", "")
-    template = next(
-        (item for item in load_industry_templates() if item.get("industry_name") == industry_name),
-        None,
+    templates = load_industry_templates()
+    if not templates:
+        st.info("產業別資料庫目前沒有資料。")
+        return None
+    activity_industry = campaign.get("primary_industry") or campaign.get("suitable_industries", "")
+    names = [item.get("industry_name", "未命名產業") for item in templates]
+    default_index = names.index(activity_industry) if activity_industry in names else 0
+    selected_name = st.selectbox(
+        "選擇引用產業", names, index=default_index, key=f"{channel}_industry_reference"
     )
-    if not template:
-        st.info(f"產業別資料庫尚未建立「{industry_name or '未指定產業'}」資料，本次不引用。")
-    return template
+    template = next(item for item in templates if item.get("industry_name") == selected_name)
+
+    if channel == "Email":
+        categories = st.multiselect(
+            "選擇引用內容",
+            ["常見痛點", "Omnichat 應用", "Showcase", "開發切角", "CTA"],
+            key="Email_industry_categories",
+        )
+        pains = st.multiselect(
+            "選擇常見痛點", template.get("pain_points", []),
+            key="Email_industry_pains",
+        ) if "常見痛點" in categories else []
+        applications = st.multiselect(
+            "選擇 Omnichat 應用",
+            template.get("omnichat_applications") or template.get("omnichat_scenarios", []),
+            key="Email_industry_applications",
+        ) if "Omnichat 應用" in categories else []
+        public_cases = [case for case in template.get("showcase_cases", []) if case.get("public")]
+        case_labels = {
+            f"{case.get('brand_name')}｜{case.get('use_cases')}": case for case in public_cases
+        }
+        selected_cases = st.multiselect(
+            "選擇 Showcase（最多 2 個）", list(case_labels), max_selections=2,
+            key="Email_industry_cases",
+        ) if "Showcase" in categories else []
+        angles = st.multiselect(
+            "選擇開發切角", template.get("development_angles", []),
+            key="Email_industry_angles",
+        ) if "開發切角" in categories else []
+        ctas = st.multiselect(
+            "選擇 CTA（最多 1 個）", template.get("common_ctas", []), max_selections=1,
+            key="Email_industry_ctas",
+        ) if "CTA" in categories else []
+        return {
+            "industry_name": selected_name,
+            "pain_points": pains,
+            "omnichat_applications": applications,
+            "showcase_cases": [case_labels[label] for label in selected_cases],
+            "development_angles": angles,
+            "common_ctas": ctas,
+            "cautions": template.get("cautions", []),
+        }
+
+    def choose_one(label: str, values: list, key: str) -> str:
+        return st.selectbox(label, ["不引用", *values], key=key)
+
+    pain = choose_one("引用 1 個痛點", template.get("pain_points", []), "LINE_industry_pain")
+    angle = choose_one("引用 1 個開發切角", template.get("development_angles", []), "LINE_industry_angle")
+    public_cases = [case for case in template.get("showcase_cases", []) if case.get("public")]
+    case_labels = {f"{case.get('brand_name')}｜{case.get('use_cases')}": case for case in public_cases}
+    case_label = choose_one("引用 1 個 Showcase", list(case_labels), "LINE_industry_case")
+    return {
+        "industry_name": selected_name,
+        "pain_points": [] if pain == "不引用" else [pain],
+        "development_angles": [] if angle == "不引用" else [angle],
+        "showcase_cases": [] if case_label == "不引用" else [case_labels[case_label]],
+        "omnichat_applications": [], "common_ctas": [],
+        "cautions": template.get("cautions", []),
+    }
 
 
 def line_lead_inputs() -> dict[str, str]:
@@ -382,11 +446,9 @@ def line_message_generator() -> None:
     scenario = st.selectbox("LINE 情境", LINE_SCENARIOS, key="LINE_scenario")
     st.subheader("Step 3｜品牌資訊")
     lead = line_lead_inputs()
-    use_industry = st.checkbox(
-        "是否引用產業資料庫", value=False, key="LINE_use_industry"
-    )
-    lead["industry_context"] = _selected_industry_context(campaign, use_industry)
-    st.subheader("Step 4｜產生 LINE 訊息")
+    st.subheader("Step 4｜產業資料引用")
+    lead["industry_context"] = industry_reference_selector(campaign, "LINE")
+    st.subheader("Step 5｜產生 LINE 訊息")
     if st.button("產生 LINE 訊息", type="primary", key="generate_LINE"):
         st.session_state["LINE_result"] = generate_line(campaign, scenario, lead)
     result = st.session_state.get("LINE_result")
@@ -414,12 +476,10 @@ def email_builder_v1() -> None:
         key="Email_observation",
         placeholder="沒有可留白，例如：近期主打中秋禮盒、官網有會員制度、近期推出新品、有 LINE 官方帳號等。",
     )
-    use_industry = st.checkbox(
-        "是否引用產業資料庫", value=False, key="Email_use_industry"
-    )
-    industry_context = _selected_industry_context(campaign, use_industry)
+    st.subheader("Step 4｜產業資料引用")
+    industry_context = industry_reference_selector(campaign, "Email")
 
-    st.subheader("Step 4｜產生 Email")
+    st.subheader("Step 5｜產生 Email")
     if st.button("產生 Email 信件", type="primary", key="generate_Email_v1"):
         if not brand.strip():
             st.error("請填寫品牌名稱。")
@@ -473,7 +533,9 @@ def _showcase_text(cases: list[dict]) -> str:
     return "\n".join(
         "｜".join([
             case.get("brand_name", ""), case.get("category", ""),
-            case.get("summary", ""), case.get("use_cases", ""),
+            case.get("use_cases", ""),
+            case.get("key_points") or case.get("summary", ""),
+            "Yes" if case.get("public", False) else "No",
         ]) for case in cases
     )
 
@@ -483,11 +545,12 @@ def _parse_showcases(value: str) -> list[dict]:
     for line in value.splitlines():
         if not line.strip():
             continue
-        fields = [item.strip() for item in line.split("｜", 3)]
-        fields += [""] * (4 - len(fields))
+        fields = [item.strip() for item in line.split("｜", 4)]
+        fields += [""] * (5 - len(fields))
         cases.append({
             "brand_name": fields[0], "category": fields[1],
-            "summary": fields[2], "use_cases": fields[3],
+            "use_cases": fields[2], "key_points": fields[3],
+            "public": fields[4].lower() in {"yes", "y", "true", "是", "可"},
         })
     return cases
 
@@ -498,6 +561,10 @@ def _industry_form(prefix: str, item: Optional[dict] = None) -> dict:
     description = st.text_area(
         "產業說明", item.get("description", ""), key=f"{prefix}_description"
     )
+    brand_scenarios = st.text_area(
+        "常見經營情境（每行一筆）", _multiline(item.get("brand_scenarios", [])),
+        key=f"{prefix}_brand_scenarios", height=150,
+    )
     pain_points = st.text_area(
         "常見痛點（每行一筆）", _multiline(item.get("pain_points", [])),
         key=f"{prefix}_pains", height=150,
@@ -507,27 +574,33 @@ def _industry_form(prefix: str, item: Optional[dict] = None) -> dict:
         key=f"{prefix}_angles", height=130,
     )
     scenarios = st.text_area(
-        "Omnichat 可應用情境（每行一筆）", _multiline(item.get("omnichat_scenarios", [])),
+        "Omnichat 對應應用（每行一筆）",
+        _multiline(item.get("omnichat_applications") or item.get("omnichat_scenarios", [])),
         key=f"{prefix}_scenarios", height=130,
     )
     showcases = st.text_area(
         "Showcase / 品牌案例",
         _showcase_text(item.get("showcase_cases", [])), key=f"{prefix}_showcases", height=150,
-        help="每行格式：品牌名稱｜品牌分類｜案例簡述｜可引用情境",
+        help="每行格式：品牌名稱｜品牌分類｜使用情境｜可引用重點｜Yes/No",
     )
     ctas = st.text_area(
         "常用 CTA（每行一筆）", _multiline(item.get("common_ctas", [])),
         key=f"{prefix}_ctas", height=130,
     )
+    cautions = st.text_area(
+        "禁用 / 注意事項（每行一筆）", _multiline(item.get("cautions", [])),
+        key=f"{prefix}_cautions", height=130,
+    )
     return {
         "industry_name": name.strip(), "description": description.strip(),
+        "brand_scenarios": _line_items(brand_scenarios),
         "pain_points": _line_items(pain_points),
         "development_angles": _line_items(angles),
-        "omnichat_scenarios": _line_items(scenarios),
+        "omnichat_applications": _line_items(scenarios),
         "showcase_cases": _parse_showcases(showcases),
         "common_ctas": _line_items(ctas),
+        "cautions": _line_items(cautions),
         # Preserve legacy knowledge fields when editing an existing record.
-        "brand_scenarios": item.get("brand_scenarios", []),
         "showcases": item.get("showcases", {}),
         "case_rules": item.get("case_rules", []),
     }
@@ -552,12 +625,19 @@ def industry_database() -> None:
 
     st.subheader(f"產業清單（{len(industries)}）")
     for item in industries:
-        with st.expander(item.get("industry_name", "未命名產業")):
+        pain_count = len(item.get("pain_points", []))
+        app_count = len(item.get("omnichat_applications") or item.get("omnichat_scenarios", []))
+        case_count = len(item.get("showcase_cases", []))
+        with st.expander(
+            f"{item.get('industry_name', '未命名產業')}｜痛點 {pain_count}｜應用 {app_count}｜案例 {case_count}"
+        ):
+            st.caption(item.get("description", "尚未填寫產業說明"))
             with st.form(f"industry_edit_{item['id']}"):
                 values = _industry_form(f"industry_{item['id']}", item)
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns(3)
                 update = col1.form_submit_button("儲存修改", type="primary")
-                delete = col2.form_submit_button("刪除產業")
+                copy = col2.form_submit_button("複製資料")
+                delete = col3.form_submit_button("刪除產業")
             if update:
                 if not values["industry_name"]:
                     st.error("請填寫產業名稱。")
@@ -565,6 +645,13 @@ def industry_database() -> None:
                     update_industry_template(item["id"], values)
                     st.success("產業資料已更新。")
                     st.rerun()
+            if copy:
+                save_industry_template({
+                    "id": str(uuid4()), **values,
+                    "industry_name": f"{values['industry_name']}（副本）",
+                })
+                st.success("產業知識已複製，請再修改產業名稱與內容。")
+                st.rerun()
             if delete:
                 delete_industry_template(item["id"])
                 st.success("產業資料已刪除。")
