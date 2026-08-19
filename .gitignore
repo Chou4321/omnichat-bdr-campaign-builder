@@ -8,3 +8,4 @@ __pycache__/
 *.log
 uploads/*
 !uploads/.gitkeep
+!uploads/20260916_LINE_Seminar.png
