@@ -43,7 +43,9 @@ class UiSmokeTests(unittest.TestCase):
         self.assertIn("預約交流連結", labels)
         self.assertIn("合作單位 / 講者", labels)
         self.assertIn("活動重點 1", labels)
-        self.assertIn("活動重點 4", labels)
+        self.assertIn("活動重點 2", labels)
+        self.assertNotIn("活動重點 3", labels)
+        self.assertNotIn("活動重點 4", labels)
         self.assertNotIn("信件大標 A（選填）", labels)
         self.assertNotIn("信件大標 B（選填）", labels)
         self.assertNotIn("信件大標 C（選填）", labels)
@@ -69,8 +71,6 @@ class UiSmokeTests(unittest.TestCase):
             "活動名稱 *": "測試食品活動",
             "活動重點 1": "掌握食品產業趨勢",
             "活動重點 2": "建立會員數據策略",
-            "活動重點 3": "精準分眾提升互動",
-            "活動重點 4": "食品品牌案例分享",
         }.items():
             create_inputs[label].set_value(value)
         create_areas = {}
@@ -102,6 +102,24 @@ class UiSmokeTests(unittest.TestCase):
             for label in ("問題式", "效益式", "趨勢 / 活動式")
         ]
         self.assertNotEqual(first_subjects, second_subjects)
+
+    def test_subject_suggestions_do_not_require_activity_points(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        next(
+            item for item in app.text_input if item.label == "活動名稱 *"
+        ).set_value("測試活動")
+        next(
+            item for item in app.text_area if item.label == "活動一句話摘要"
+        ).set_value("分享品牌成長與會員經營實務。")
+        next(
+            item for item in app.button if item.label == "產生 3 個信件大標"
+        ).click().run(timeout=10)
+        self.assertFalse(app.exception)
+        labels = [item.label for item in app.text_input]
+        self.assertIn("問題式", labels)
+        self.assertIn("效益式", labels)
+        self.assertIn("趨勢 / 活動式", labels)
 
     def test_email_builder_v1_has_only_simplified_fields(self):
         app_path = Path(__file__).parents[1] / "app.py"

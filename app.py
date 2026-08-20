@@ -338,7 +338,13 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
             campaign.get(f"activity_point_{index}", ""),
             key=f"{prefix}_point_{index}",
         )
-        for index in range(1, 5)
+        for index in range(1, 3)
+    ]
+    # Legacy campaigns may still contain points 3 and 4. Keep those values in
+    # storage for backward compatibility, but no longer show or require them.
+    legacy_points = [
+        campaign.get("activity_point_3", ""),
+        campaign.get("activity_point_4", ""),
     ]
     st.markdown("### 信件大標建議")
     existing_subjects = [
@@ -360,10 +366,10 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
     )
     generate_subjects = st.form_submit_button(generation_label)
     if generate_subjects:
-        if not name.strip() or not summary.strip() or not introduction.strip() or not all(
-            point.strip() for point in points
-        ):
-            st.error("請先填寫活動名稱、活動一句話摘要、活動介紹與 4 個活動重點。")
+        if not name.strip():
+            st.error("請先填寫活動名稱。")
+        elif not (summary.strip() or introduction.strip()):
+            st.error("請至少填寫活動一句話摘要或活動介紹。")
         else:
             if has_generated_subjects:
                 st.session_state[round_key] = (st.session_state[round_key] + 1) % 3
@@ -373,7 +379,8 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
                 "primary_industry": primary_industry,
                 "summary": summary.strip(),
                 "introduction": introduction.strip(),
-                **{f"activity_point_{index}": points[index - 1].strip() for index in range(1, 5)},
+                "activity_point_1": points[0].strip(),
+                "activity_point_2": points[1].strip(),
             }, st.session_state[round_key])
             for label, value in zip(("a", "b", "c"), generated):
                 st.session_state[f"{prefix}_subject_{label}"] = value
@@ -458,8 +465,8 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
         "introduction": introduction.strip(),
         "activity_point_1": points[0].strip(),
         "activity_point_2": points[1].strip(),
-        "activity_point_3": points[2].strip(),
-        "activity_point_4": points[3].strip(),
+        "activity_point_3": legacy_points[0],
+        "activity_point_4": legacy_points[1],
         "subject_a": subjects[0].strip(),
         "subject_b": subjects[1].strip(),
         "subject_c": subjects[2].strip(),
