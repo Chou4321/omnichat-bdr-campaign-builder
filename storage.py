@@ -168,15 +168,30 @@ def _supabase_credentials() -> tuple[str, str]:
         raise _industry_storage_error("連線", error) from error
     if not url or not secret_key:
         raise _industry_storage_error("連線", ValueError("Supabase Secrets 不完整"))
+    if not secret_key.startswith("sb_secret_"):
+        raise _industry_storage_error(
+            "連線",
+            ValueError(
+                "secret_key 必須使用 Supabase Secret key（sb_secret_ 開頭），"
+                "不可使用 Publishable／anon key"
+            ),
+        )
     return url, secret_key
 
 
 @lru_cache(maxsize=1)
 def _create_supabase_client(url: str, secret_key: str):
     try:
-        from supabase import create_client
+        from supabase import ClientOptions, create_client
 
-        return create_client(url, secret_key)
+        return create_client(
+            url,
+            secret_key,
+            options=ClientOptions(
+                auto_refresh_token=False,
+                persist_session=False,
+            ),
+        )
     except Exception as error:
         raise _industry_storage_error("建立連線", error) from error
 

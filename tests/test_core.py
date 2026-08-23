@@ -14,7 +14,10 @@ from generators import (
 )
 from models import EMAIL_SCENARIOS, LINE_SCENARIOS
 from storage import (
+    IndustryStorageError,
     JsonStore,
+    _create_supabase_client,
+    _supabase_credentials,
     delete_campaign,
     delete_industry_template,
     load_campaigns,
@@ -53,6 +56,28 @@ LEAD = {"brand": "測試品牌", "contact": "王小姐", "needs": "提升回購"
 
 
 class StoreTests(unittest.TestCase):
+    def test_supabase_credentials_reject_publishable_key(self):
+        fake_secrets = {
+            "supabase": {
+                "url": "https://example.supabase.co",
+                "secret_key": "sb_publishable_not_allowed",
+            }
+        }
+        with patch("streamlit.secrets", fake_secrets):
+            with self.assertRaisesRegex(IndustryStorageError, "sb_secret_"):
+                _supabase_credentials()
+
+    def test_supabase_client_disables_user_auth_session(self):
+        with patch("supabase.create_client") as create_client:
+            _create_supabase_client.cache_clear()
+            _create_supabase_client(
+                "https://example.supabase.co", "sb_secret_server_test"
+            )
+        options = create_client.call_args.kwargs["options"]
+        self.assertFalse(options.auto_refresh_token)
+        self.assertFalse(options.persist_session)
+        _create_supabase_client.cache_clear()
+
     def test_crud(self):
         with tempfile.TemporaryDirectory() as directory:
             store = JsonStore(Path(directory) / "items.json")
