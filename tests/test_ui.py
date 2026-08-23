@@ -42,8 +42,8 @@ class UiSmokeTests(unittest.TestCase):
         self.assertIn("報名連結", labels)
         self.assertIn("預約交流連結", labels)
         self.assertIn("合作單位 / 講者", labels)
-        self.assertIn("活動重點 1", labels)
-        self.assertIn("活動重點 2", labels)
+        self.assertNotIn("活動重點 1", labels)
+        self.assertNotIn("活動重點 2", labels)
         self.assertNotIn("活動重點 3", labels)
         self.assertNotIn("活動重點 4", labels)
         self.assertNotIn("信件大標 A（選填）", labels)
@@ -55,8 +55,9 @@ class UiSmokeTests(unittest.TestCase):
         self.assertNotIn("自訂大標", labels)
         self.assertIn("產生 3 個信件大標", [item.label for item in app.button])
         areas = [item.label for item in app.text_area]
-        self.assertIn("活動一句話摘要", areas)
         self.assertIn("活動介紹", areas)
+        self.assertIn("活動重點", areas)
+        self.assertNotIn("活動一句話摘要", areas)
         self.assertNotIn("Landing Page 內容", areas)
         self.assertNotIn("活動議程", areas)
         self.assertNotIn("複製活動", [item.label for item in app.button])
@@ -67,20 +68,16 @@ class UiSmokeTests(unittest.TestCase):
         create_inputs = {}
         for item in app.text_input:
             create_inputs.setdefault(item.label, item)
-        for label, value in {
-            "活動名稱 *": "測試食品活動",
-            "活動重點 1": "掌握食品產業趨勢",
-            "活動重點 2": "建立會員數據策略",
-        }.items():
+        for label, value in {"活動名稱 *": "測試食品活動"}.items():
             create_inputs[label].set_value(value)
         create_areas = {}
         for item in app.text_area:
             create_areas.setdefault(item.label, item)
-        create_areas["活動一句話摘要"].set_value(
-            "從會員數據到分眾行銷，建立食品品牌持續成長模式。"
-        )
         create_areas["活動介紹"].set_value(
             "分享食品產業趨勢、會員數據與分眾行銷實務。"
+        )
+        create_areas["活動重點"].set_value(
+            "・掌握食品產業趨勢\n・建立會員數據策略"
         )
         next(
             item for item in app.button if item.label == "產生 3 個信件大標"
@@ -110,7 +107,7 @@ class UiSmokeTests(unittest.TestCase):
             item for item in app.text_input if item.label == "活動名稱 *"
         ).set_value("測試活動")
         next(
-            item for item in app.text_area if item.label == "活動一句話摘要"
+            item for item in app.text_area if item.label == "活動介紹"
         ).set_value("分享品牌成長與會員經營實務。")
         next(
             item for item in app.button if item.label == "產生 3 個信件大標"

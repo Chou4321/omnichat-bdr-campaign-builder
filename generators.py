@@ -8,6 +8,17 @@ def _campaign_industry(campaign: dict[str, Any]) -> str:
 
 
 def _campaign_points(campaign: dict[str, Any]) -> list[str]:
+    stored = campaign.get("activity_points", [])
+    if isinstance(stored, str):
+        stored = [
+            line.strip().lstrip("-•・ ")
+            for line in stored.splitlines()
+            if line.strip().lstrip("-•・ ")
+        ]
+    if isinstance(stored, list):
+        points = [str(item).strip() for item in stored if str(item).strip()]
+        if points:
+            return points
     explicit = [
         campaign.get(f"activity_point_{index}", "").strip()
         for index in range(1, 5)
@@ -44,11 +55,7 @@ def generate_subject_suggestions(
     industry = _subject_industry(_campaign_industry(campaign))
     summary = (campaign.get("summary") or "").strip()
     introduction = (campaign.get("introduction") or "").strip()
-    source_phrases = [
-        (campaign.get(f"activity_point_{index}") or "").strip()
-        for index in range(1, 5)
-        if (campaign.get(f"activity_point_{index}") or "").strip()
-    ]
+    source_phrases = _campaign_points(campaign)
     if not source_phrases:
         source_phrases = _intro_points(summary or introduction)
     first = _subject_phrase(source_phrases[0] if source_phrases else name)
@@ -659,11 +666,6 @@ def _generate_line_invitation(
         reference_lines.append(f"📌 案例：{case.get('brand_name')}｜{case.get('use_cases')}")
     reference_block = f"\n\n{chr(10).join(reference_lines)}" if reference_lines else ""
     activity_points = _campaign_points(campaign)
-    if len(activity_points) < 3:
-        return (
-            "活動內容不足，無法在不猜測的前提下整理四個活動亮點。"
-            "請先到活動管理補充活動介紹與活動亮點。"
-        )
     event_date = event.get("event_date") or campaign.get("event_date") or "（請填寫日期）"
     event_time = event.get("event_time") or campaign.get("event_time") or ""
     location = event.get("location_or_online") or campaign.get("location") or campaign.get("event_format") or ""

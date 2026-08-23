@@ -46,6 +46,7 @@ class Campaign:
     primary_industry: str = ""
     summary: str = ""
     introduction: str = ""
+    activity_points: list[str] = field(default_factory=list)
     activity_point_1: str = ""
     activity_point_2: str = ""
     activity_point_3: str = ""

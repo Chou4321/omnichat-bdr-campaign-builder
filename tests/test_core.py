@@ -93,6 +93,23 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(reloaded["subject_a"], "問題式大標")
             self.assertEqual(reloaded["selected_subject"], "效益式大標")
 
+    def test_legacy_campaign_points_are_normalized_without_data_loss(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "campaigns.json"
+            save_campaign({
+                "id": "legacy-points",
+                "name": "舊活動",
+                "activity_point_1": "舊重點一",
+                "activity_point_2": "舊重點二",
+                "activity_point_3": "舊重點三",
+                "activity_point_4": "舊重點四",
+            }, path)
+            reloaded = load_campaigns(path)[0]
+            self.assertEqual(
+                reloaded["activity_points"],
+                ["舊重點一", "舊重點二", "舊重點三", "舊重點四"],
+            )
+
     def test_food_industry_knowledge_exists(self):
         template = load_industry_templates()[0]
         self.assertEqual(template["industry_name"], "食品 / 伴手禮")
@@ -136,6 +153,23 @@ class StoreTests(unittest.TestCase):
 
 
 class GeneratorTests(unittest.TestCase):
+    def test_new_activity_points_are_shared_by_email_and_line(self):
+        campaign = {
+            **CAMPAIGN,
+            "summary": "",
+            "activity_points": ["新格式重點一", "新格式重點二"],
+            "activity_point_1": "不應使用的舊重點",
+        }
+        _, email_body, _ = generate_email(
+            campaign, "陌生開發邀約", {"brand": "測試品牌", "contact": "窗口"}
+        )
+        line_body = generate_line(
+            campaign, "活動提醒", {"brand": "測試品牌", "contact": "窗口"}
+        )
+        self.assertIn("新格式重點一", email_body)
+        self.assertIn("新格式重點一", line_body)
+        self.assertNotIn("不應使用的舊重點", email_body)
+
     def test_email(self):
         subjects, body, cta = generate_email(CAMPAIGN, "活動前提醒", LEAD)
         self.assertEqual(len(subjects), 3)

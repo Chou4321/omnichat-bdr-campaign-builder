@@ -318,34 +318,25 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
     )
 
     st.markdown("### Step 2｜活動核心內容")
-    summary = st.text_area(
-        "活動一句話摘要",
-        campaign.get("summary", ""),
-        height=120,
-        key=f"{prefix}_summary",
-        help="建議 1～2 句，Email、LINE 與活動圖文會直接共用。",
-    )
     introduction = st.text_area(
         "活動介紹",
         campaign.get("introduction") or campaign.get("highlights", ""),
         height=220,
         key=f"{prefix}_introduction",
-        help="完整活動背景、主題、內容或議程集中填在這裡。",
+        help="填寫完整活動內容、活動定位、主辦單位、適合對象等資訊。",
     )
-    points = [
-        st.text_input(
-            f"活動重點 {index}",
-            campaign.get(f"activity_point_{index}", ""),
-            key=f"{prefix}_point_{index}",
-        )
-        for index in range(1, 3)
-    ]
-    # Legacy campaigns may still contain points 3 and 4. Keep those values in
-    # storage for backward compatibility, but no longer show or require them.
-    legacy_points = [
-        campaign.get("activity_point_3", ""),
-        campaign.get("activity_point_4", ""),
-    ]
+    existing_points = campaign.get("activity_points", [])
+    if not isinstance(existing_points, list):
+        existing_points = []
+    activity_points_text = st.text_area(
+        "活動重點",
+        "\n".join(str(item) for item in existing_points),
+        height=160,
+        key=f"{prefix}_activity_points",
+        help="可輸入多個活動重點，每行一個。",
+        placeholder="・精準獲客與第一方數據蒐集\n・LINE 會員分眾與自動化經營\n・品牌會員經營實際案例",
+    )
+    points = _line_items(activity_points_text)
     st.markdown("### 信件大標建議")
     existing_subjects = [
         st.session_state.get(
@@ -368,8 +359,8 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
     if generate_subjects:
         if not name.strip():
             st.error("請先填寫活動名稱。")
-        elif not (summary.strip() or introduction.strip()):
-            st.error("請至少填寫活動一句話摘要或活動介紹。")
+        elif not (introduction.strip() or points):
+            st.error("請至少填寫活動介紹或活動重點。")
         else:
             if has_generated_subjects:
                 st.session_state[round_key] = (st.session_state[round_key] + 1) % 3
@@ -377,10 +368,9 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
                 "name": name.strip(),
                 "event_date": event_date.isoformat(),
                 "primary_industry": primary_industry,
-                "summary": summary.strip(),
+                "summary": campaign.get("summary", ""),
                 "introduction": introduction.strip(),
-                "activity_point_1": points[0].strip(),
-                "activity_point_2": points[1].strip(),
+                "activity_points": points,
             }, st.session_state[round_key])
             for label, value in zip(("a", "b", "c"), generated):
                 st.session_state[f"{prefix}_subject_{label}"] = value
@@ -461,12 +451,16 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
         "booking_url": booking.strip(),
         "partner": partner.strip(),
         "primary_industry": primary_industry,
-        "summary": summary.strip(),
+        # Keep the legacy summary value readable for existing campaigns. New
+        # campaigns derive copy from introduction and activity_points instead.
+        "summary": campaign.get("summary", ""),
         "introduction": introduction.strip(),
-        "activity_point_1": points[0].strip(),
-        "activity_point_2": points[1].strip(),
-        "activity_point_3": legacy_points[0],
-        "activity_point_4": legacy_points[1],
+        "activity_points": points,
+        # Mirror the first four lines for legacy template compatibility.
+        **{
+            f"activity_point_{index}": points[index - 1] if len(points) >= index else ""
+            for index in range(1, 5)
+        },
         "subject_a": subjects[0].strip(),
         "subject_b": subjects[1].strip(),
         "subject_c": subjects[2].strip(),
@@ -694,7 +688,11 @@ def _multiline(value: object) -> str:
 
 
 def _line_items(value: str) -> list[str]:
-    return [line.strip().lstrip("-• ") for line in value.splitlines() if line.strip()]
+    return [
+        line.strip().lstrip("-•・ ")
+        for line in value.splitlines()
+        if line.strip().lstrip("-•・ ")
+    ]
 
 
 def _showcase_text(cases: list[dict]) -> str:

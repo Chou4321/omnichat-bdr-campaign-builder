@@ -62,6 +62,24 @@ def _campaign_store(path: Union[str, Path] = CAMPAIGNS_PATH) -> JsonStore:
 
 def _normalize_campaign(campaign: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(campaign)
+    stored_points = normalized.get("activity_points")
+    if isinstance(stored_points, str):
+        stored_points = [
+            line.strip().lstrip("-•・ ")
+            for line in stored_points.splitlines()
+            if line.strip().lstrip("-•・ ")
+        ]
+    elif isinstance(stored_points, list):
+        stored_points = [str(item).strip() for item in stored_points if str(item).strip()]
+    else:
+        stored_points = []
+    if not stored_points:
+        stored_points = [
+            str(normalized.get(f"activity_point_{index}", "")).strip()
+            for index in range(1, 5)
+            if str(normalized.get(f"activity_point_{index}", "")).strip()
+        ]
+    normalized["activity_points"] = stored_points
     defaults = {
         "event_time": "",
         "location": "",
