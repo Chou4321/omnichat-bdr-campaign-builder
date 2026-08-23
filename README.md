@@ -26,18 +26,28 @@ Windows 可將 `.venv/bin/` 改為 `.venv\Scripts\`。
 1. 將此資料夾推送至 GitHub repository。
 2. 在 Streamlit Community Cloud 建立 app。
 3. Entrypoint 設為 `app.py`。
-4. 不需要設定 API secrets。
+4. 在 App Settings → Secrets 設定 Supabase：
+
+```toml
+[supabase]
+url = "https://YOUR_PROJECT.supabase.co"
+secret_key = "sb_secret_YOUR_SECRET_KEY"
+```
+
+5. 在 Supabase SQL Editor 執行
+   `supabase/migrations/001_industry_templates.sql`。
 
 專案沒有綁定 IP 或本機絕對路徑。`.streamlit/config.toml` 只設定 headless、上傳限制與主題。
 
 ## Storage
 
 - `data/campaigns.json`：活動資料
-- `data/industry_templates.json`：產業 Knowledge Base
+- Supabase `industry_templates`：產業 Knowledge Base 的永久主要資料來源
+- `data/industry_templates.json`：首次移轉來源與唯讀備份，不再接收網頁寫入
 - `data/templates.json`：既有人工文案資料（保留相容性，不顯示於主導覽）
 - `uploads/`：本機上傳素材
 
-所有 JSON 存取集中於 `storage.py`。目前 local JSON 與 `uploads/` 適合本機或原型測試；Streamlit Community Cloud 的執行檔案系統不是持久型資料庫，重新部署或重啟後的使用者寫入不保證保留。正式多人使用前，需將 storage layer 換成持久化資料庫／物件儲存，但本版本未串接 Supabase 或其他付費服務。
+所有資料存取集中於 `storage.py`。產業資料由 Supabase 永久保存，首次連線會將 JSON 備份中尚未存在的資料移轉一次；連線失敗時會顯示錯誤，且不會回退寫入 Streamlit 本機 JSON。活動資料與上傳素材目前仍使用本機檔案。
 
 ## 安全與版本控制
 

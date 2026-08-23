@@ -1,4 +1,6 @@
 import json
+import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Union
 
@@ -8,6 +10,18 @@ DATA_DIR = BASE_DIR / "data"
 CAMPAIGNS_PATH = DATA_DIR / "campaigns.json"
 COPY_TEMPLATES_PATH = DATA_DIR / "templates.json"
 INDUSTRY_TEMPLATES_PATH = DATA_DIR / "industry_templates.json"
+INDUSTRY_TABLE = "industry_templates"
+MIGRATIONS_TABLE = "app_migrations"
+INDUSTRY_JSON_MIGRATION = "industry_templates_json_v1"
+
+
+class IndustryStorageError(RuntimeError):
+    """Raised when permanent industry storage is unavailable."""
+
+
+def _industry_json_test_backend() -> bool:
+    """Allow deterministic UI tests without weakening production persistence."""
+    return os.environ.get("OMNICHAT_TEST_INDUSTRY_JSON") == "1"
 
 
 class JsonStore:
@@ -129,30 +143,193 @@ def delete_campaign(
     return _campaign_store(path).delete(campaign_id)
 
 
+def _industry_storage_error(action: str, error: Exception) -> IndustryStorageError:
+    message = (
+        f"產業別資料庫無法{action}。資料沒有改寫至本機 JSON，請檢查 Supabase "
+        f"連線、資料表與 Streamlit Secrets。原始錯誤：{error}"
+    )
+    try:
+        import streamlit as st
+
+        st.error(message)
+    except Exception:
+        pass
+    return IndustryStorageError(message)
+
+
+def _supabase_credentials() -> tuple[str, str]:
+    try:
+        import streamlit as st
+
+        settings = st.secrets["supabase"]
+        url = str(settings["url"]).strip()
+        secret_key = str(settings["secret_key"]).strip()
+    except Exception as error:
+        raise _industry_storage_error("連線", error) from error
+    if not url or not secret_key:
+        raise _industry_storage_error("連線", ValueError("Supabase Secrets 不完整"))
+    return url, secret_key
+
+
+@lru_cache(maxsize=1)
+def _create_supabase_client(url: str, secret_key: str):
+    try:
+        from supabase import create_client
+
+        return create_client(url, secret_key)
+    except Exception as error:
+        raise _industry_storage_error("建立連線", error) from error
+
+
+def _supabase_client():
+    return _create_supabase_client(*_supabase_credentials())
+
+
+def _industry_row(template: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(template)
+    template_id = str(payload.get("id", "")).strip()
+    industry_name = str(payload.get("industry_name", "")).strip()
+    if not template_id or not industry_name:
+        raise ValueError("產業資料必須包含 id 與 industry_name")
+    payload["id"] = template_id
+    payload["industry_name"] = industry_name
+    return {
+        "id": template_id,
+        "industry_name": industry_name,
+        "payload": payload,
+    }
+
+
+def _migrate_industry_json_once(client) -> None:
+    migration = (
+        client.table(MIGRATIONS_TABLE)
+        .select("key")
+        .eq("key", INDUSTRY_JSON_MIGRATION)
+        .limit(1)
+        .execute()
+    )
+    if migration.data:
+        return
+
+    backup_records = JsonStore(INDUSTRY_TEMPLATES_PATH).load()
+    existing = client.table(INDUSTRY_TABLE).select("id").execute()
+    existing_ids = {str(row["id"]) for row in (existing.data or [])}
+    missing_rows = [
+        _industry_row(record)
+        for record in backup_records
+        if str(record.get("id", "")) not in existing_ids
+    ]
+    if missing_rows:
+        client.table(INDUSTRY_TABLE).upsert(
+            missing_rows, on_conflict="id", ignore_duplicates=True
+        ).execute()
+    client.table(MIGRATIONS_TABLE).upsert(
+        {"key": INDUSTRY_JSON_MIGRATION},
+        on_conflict="key",
+        ignore_duplicates=True,
+    ).execute()
+
+
+def _load_supabase_industries() -> list[dict[str, Any]]:
+    try:
+        client = _supabase_client()
+        _migrate_industry_json_once(client)
+        response = (
+            client.table(INDUSTRY_TABLE)
+            .select("payload")
+            .order("industry_name")
+            .execute()
+        )
+        return [dict(row["payload"]) for row in (response.data or [])]
+    except IndustryStorageError:
+        raise
+    except Exception as error:
+        raise _industry_storage_error("讀取", error) from error
+
+
 def load_industry_templates(
-    path: Union[str, Path] = INDUSTRY_TEMPLATES_PATH,
+    path: Union[str, Path, None] = None,
 ) -> list[dict[str, Any]]:
-    return JsonStore(path).load()
+    if path is None and _industry_json_test_backend():
+        path = INDUSTRY_TEMPLATES_PATH
+    if path is not None:
+        return JsonStore(path).load()
+    return _load_supabase_industries()
 
 
 def save_industry_template(
-    template: dict[str, Any], path: Union[str, Path] = INDUSTRY_TEMPLATES_PATH
+    template: dict[str, Any], path: Union[str, Path, None] = None
 ) -> None:
-    JsonStore(path).add(template)
+    if path is None and _industry_json_test_backend():
+        path = INDUSTRY_TEMPLATES_PATH
+    if path is not None:
+        JsonStore(path).add(template)
+        return
+    try:
+        _supabase_client().table(INDUSTRY_TABLE).insert(
+            _industry_row(template)
+        ).execute()
+    except IndustryStorageError:
+        raise
+    except Exception as error:
+        raise _industry_storage_error("新增", error) from error
 
 
 def update_industry_template(
     template_id: str,
     values: dict[str, Any],
-    path: Union[str, Path] = INDUSTRY_TEMPLATES_PATH,
+    path: Union[str, Path, None] = None,
 ) -> bool:
-    return JsonStore(path).update(template_id, values)
+    if path is None and _industry_json_test_backend():
+        path = INDUSTRY_TEMPLATES_PATH
+    if path is not None:
+        return JsonStore(path).update(template_id, values)
+    try:
+        client = _supabase_client()
+        current = (
+            client.table(INDUSTRY_TABLE)
+            .select("payload")
+            .eq("id", template_id)
+            .limit(1)
+            .execute()
+        )
+        if not current.data:
+            return False
+        merged = {**dict(current.data[0]["payload"]), **values, "id": template_id}
+        client.table(INDUSTRY_TABLE).update(_industry_row(merged)).eq(
+            "id", template_id
+        ).execute()
+        return True
+    except IndustryStorageError:
+        raise
+    except Exception as error:
+        raise _industry_storage_error("更新", error) from error
 
 
 def delete_industry_template(
-    template_id: str, path: Union[str, Path] = INDUSTRY_TEMPLATES_PATH
+    template_id: str, path: Union[str, Path, None] = None
 ) -> bool:
-    return JsonStore(path).delete(template_id)
+    if path is None and _industry_json_test_backend():
+        path = INDUSTRY_TEMPLATES_PATH
+    if path is not None:
+        return JsonStore(path).delete(template_id)
+    try:
+        client = _supabase_client()
+        current = (
+            client.table(INDUSTRY_TABLE)
+            .select("id")
+            .eq("id", template_id)
+            .limit(1)
+            .execute()
+        )
+        if not current.data:
+            return False
+        client.table(INDUSTRY_TABLE).delete().eq("id", template_id).execute()
+        return True
+    except IndustryStorageError:
+        raise
+    except Exception as error:
+        raise _industry_storage_error("刪除", error) from error
 
 
 def load_copy_templates(

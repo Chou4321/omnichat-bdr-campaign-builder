@@ -2,6 +2,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from generators import (
     generate_banner,
@@ -111,7 +113,7 @@ class StoreTests(unittest.TestCase):
             )
 
     def test_food_industry_knowledge_exists(self):
-        template = load_industry_templates()[0]
+        template = load_industry_templates(Path("data/industry_templates.json"))[0]
         self.assertEqual(template["industry_name"], "食品 / 伴手禮")
         self.assertIn("星球工坊爆米花", template["showcases"]["食品伴手禮"])
         self.assertGreaterEqual(len(template["pain_points"]), 6)
@@ -150,6 +152,101 @@ class StoreTests(unittest.TestCase):
 
             self.assertTrue(delete_industry_template("food", path))
             self.assertEqual(load_industry_templates(path), [])
+
+    def test_supabase_industry_storage_migrates_and_persists_crud(self):
+        class FakeQuery:
+            def __init__(self, database, table):
+                self.database = database
+                self.table = table
+                self.operation = "select"
+                self.columns = "*"
+                self.values = None
+                self.filters = {}
+
+            def select(self, columns):
+                self.operation = "select"
+                self.columns = columns
+                return self
+
+            def insert(self, values):
+                self.operation = "insert"
+                self.values = values
+                return self
+
+            def upsert(self, values, **_kwargs):
+                self.operation = "upsert"
+                self.values = values
+                return self
+
+            def update(self, values):
+                self.operation = "update"
+                self.values = values
+                return self
+
+            def delete(self):
+                self.operation = "delete"
+                return self
+
+            def eq(self, key, value):
+                self.filters[key] = value
+                return self
+
+            def limit(self, _value):
+                return self
+
+            def order(self, _column):
+                return self
+
+            def execute(self):
+                rows = self.database.setdefault(self.table, [])
+                matching = [
+                    row for row in rows
+                    if all(row.get(key) == value for key, value in self.filters.items())
+                ]
+                if self.operation == "select":
+                    columns = [item.strip() for item in self.columns.split(",")]
+                    return SimpleNamespace(data=[
+                        {key: row[key] for key in columns if key in row}
+                        for row in matching
+                    ])
+                values = self.values if isinstance(self.values, list) else [self.values]
+                if self.operation in {"insert", "upsert"}:
+                    for value in values:
+                        key_name = "key" if self.table == "app_migrations" else "id"
+                        current = next(
+                            (row for row in rows if row[key_name] == value[key_name]), None
+                        )
+                        if current is None:
+                            rows.append(dict(value))
+                        elif self.operation == "upsert":
+                            current.update(value)
+                elif self.operation == "update":
+                    for row in matching:
+                        row.update(self.values)
+                elif self.operation == "delete":
+                    self.database[self.table] = [row for row in rows if row not in matching]
+                return SimpleNamespace(data=[])
+
+        class FakeClient:
+            def __init__(self):
+                self.database = {"industry_templates": [], "app_migrations": []}
+
+            def table(self, name):
+                return FakeQuery(self.database, name)
+
+        client = FakeClient()
+        with patch("storage._supabase_client", return_value=client):
+            migrated = load_industry_templates()
+            self.assertEqual(migrated[0]["industry_name"], "食品 / 伴手禮")
+            self.assertEqual(len(client.database["app_migrations"]), 1)
+
+            pet = {"id": "pet", "industry_name": "寵物", "pain_points": ["回購"]}
+            save_industry_template(pet)
+            self.assertTrue(update_industry_template("pet", {"pain_points": ["分眾"]}))
+            reloaded = {item["id"]: item for item in load_industry_templates()}
+            self.assertEqual(reloaded["pet"]["pain_points"], ["分眾"])
+            self.assertTrue(delete_industry_template("pet"))
+            self.assertNotIn("pet", {item["id"] for item in load_industry_templates()})
 
 
 class GeneratorTests(unittest.TestCase):

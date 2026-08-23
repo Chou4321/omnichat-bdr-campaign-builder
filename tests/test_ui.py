@@ -1,3 +1,4 @@
+import os
 import unittest
 from pathlib import Path
 
@@ -5,6 +6,12 @@ from streamlit.testing.v1 import AppTest
 
 
 class UiSmokeTests(unittest.TestCase):
+    def setUp(self):
+        os.environ["OMNICHAT_TEST_INDUSTRY_JSON"] = "1"
+
+    def tearDown(self):
+        os.environ.pop("OMNICHAT_TEST_INDUSTRY_JSON", None)
+
     def test_sidebar_and_default_page_render(self):
         app_path = Path(__file__).parents[1] / "app.py"
         app = AppTest.from_file(str(app_path)).run(timeout=10)
