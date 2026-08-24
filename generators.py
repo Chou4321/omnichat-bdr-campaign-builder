@@ -140,12 +140,90 @@ def generate_email(
     }
     if scenario in current_scenarios:
         return _generate_v1_email(campaign, scenario, lead)
+    if scenario == "活動前確認通知（Pre-call）":
+        return _generate_attendance_confirmation_email(
+            campaign, lead, event_details or {}
+        )
     if scenario == "活動報名後打招呼":
         return _generate_precall_email(campaign, lead, event_details or {})
     if scenario in recovered_scenarios:
         return _generate_recovered_email(campaign, scenario, lead)
     else:
         raise ValueError(f"不支援的 Email 情境：{scenario}")
+
+
+def _generate_attendance_confirmation_email(
+    campaign: dict[str, Any], lead: dict[str, str], event: dict[str, Any]
+) -> tuple[list[str], str, str]:
+    """Permanent rule-based template for 活動前確認通知（Pre-call）."""
+    event_name = campaign.get("name") or "本次活動"
+    contact = lead.get("contact") or "貴品牌團隊"
+    subject = f"活動確認出席｜【{event_name}】活動出席確認信（Energy）"
+    topics = _attendance_confirmation_topics(campaign, lead)
+    if len(topics) < 3:
+        warning = (
+            "活動與品牌需求資料不足，無法在不猜測的前提下整理 3～4 個議題。"
+            "請先補充活動介紹、活動重點或品牌需求。"
+        )
+        return [subject], warning, ""
+
+    event_datetime = " ".join(
+        value for value in (
+            campaign.get("event_date", ""), campaign.get("event_time", "")
+        ) if value
+    ) or "（請於活動管理填寫）"
+    location = (
+        campaign.get("location") or campaign.get("event_format")
+        or "（請於活動管理填寫）"
+    )
+    visual = campaign.get("image_path") or "（活動管理尚未上傳）"
+    booking = campaign.get("booking_url") or "（請於活動管理補上預約交流連結）"
+    service_intro = event.get("service_intro_url") or "（請補上服務介紹連結）"
+    topic_lines = "\n".join(f"• {topic}" for topic in topics[:4])
+    cta = (
+        "我很樂意先依品牌現況分享相關案例與應用，讓您在參與活動前能具體參考！\n"
+        f"歡迎安排 15 分鐘快速交流 👉【{booking}】"
+    )
+    body = f"""Dear {contact} 您好，
+
+我是 Omnichat 周周，也是本次與您聯繫的品牌窗口。
+提醒您已報名【{event_name}】，這邊已先為您保留席次，想確認當天是否方便出席？
+
+【活動資訊】
+活動時間｜{event_datetime}
+活動地點｜{location}
+活動主視覺｜{visual}
+
+為了讓當天內容更貼近品牌的實際情境，若您正好在思考：
+{topic_lines}
+
+{cta}
+
+📄 Omnichat 服務介紹（含會員經營策略與實務案例）｜{service_intro}
+
+期待活動前能先認識您，讓當天交流更有收穫😊"""
+    return [subject], body, cta
+
+
+def _attendance_confirmation_topics(
+    campaign: dict[str, Any], lead: dict[str, str]
+) -> list[str]:
+    """Use only supplied campaign and brand-need text; never invent topics."""
+    candidates = []
+    needs = (lead.get("needs") or "").strip()
+    if needs:
+        candidates.extend(_intro_points(needs))
+    candidates.extend(_campaign_points(campaign))
+    introduction = (campaign.get("introduction") or "").strip()
+    if introduction:
+        candidates.extend(_intro_points(introduction))
+
+    topics = []
+    for candidate in candidates:
+        normalized = str(candidate).strip().lstrip("-•・ ")
+        if normalized and normalized not in topics:
+            topics.append(normalized)
+    return topics[:4]
 
 
 def _generate_recovered_email(

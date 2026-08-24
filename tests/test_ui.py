@@ -131,7 +131,8 @@ class UiSmokeTests(unittest.TestCase):
         app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
         self.assertEqual(app.selectbox[1].options, [
             "陌生開發邀約", "活動報名後打招呼", "活動前交流邀約",
-            "活動審核通知", "活動出席確認", "活動前提醒", "活動後關懷",
+            "活動審核通知", "活動出席確認", "活動前確認通知（Pre-call）",
+            "活動前提醒", "活動後關懷",
             "講者簡報分享", "活動回放分享", "報名未出席 Follow-up",
             "Demo 邀約", "第二次追蹤", "最後追蹤", "活動後跟進",
             "自主報名確認", "一般開發信",
@@ -159,6 +160,15 @@ class UiSmokeTests(unittest.TestCase):
         app.selectbox[1].set_value("活動報名後打招呼").run(timeout=10)
         uploaders = [item.label for item in app.get("file_uploader")]
         self.assertEqual(uploaders, ["附件② Omnichat 服務介紹 PDF"])
+
+    def test_attendance_confirmation_precall_shows_service_link(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
+        app.selectbox[1].set_value("活動前確認通知（Pre-call）").run(timeout=10)
+        labels = [item.label for item in app.text_input]
+        self.assertIn("Omnichat 服務介紹連結（選填）", labels)
+        self.assertEqual(len(app.get("file_uploader")), 0)
 
     def test_email_builder_v1_has_banner_and_generate_button(self):
         app_path = Path(__file__).parents[1] / "app.py"

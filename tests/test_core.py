@@ -394,7 +394,8 @@ class GeneratorTests(unittest.TestCase):
     def test_scenario_counts(self):
         self.assertEqual(EMAIL_SCENARIOS, [
             "陌生開發邀約", "活動報名後打招呼", "活動前交流邀約",
-            "活動審核通知", "活動出席確認", "活動前提醒", "活動後關懷",
+            "活動審核通知", "活動出席確認", "活動前確認通知（Pre-call）",
+            "活動前提醒", "活動後關懷",
             "講者簡報分享", "活動回放分享", "報名未出席 Follow-up",
             "Demo 邀約", "第二次追蹤", "最後追蹤", "活動後跟進",
             "自主報名確認", "一般開發信",
@@ -471,6 +472,45 @@ class GeneratorTests(unittest.TestCase):
         self.assertIn("活動 Banner｜uploads/banner.png", body)
         self.assertIn("Omnichat 服務介紹｜service.pdf", body)
         self.assertIn("15 分鐘交流", cta)
+
+    def test_attendance_confirmation_precall_is_fixed_and_grounded(self):
+        campaign = {**CAMPAIGN, "image_path": "uploads/event.png"}
+        subjects, body, cta = generate_email(
+            campaign,
+            "活動前確認通知（Pre-call）",
+            {
+                **LEAD,
+                "industry": "零售",
+                "needs": "會員回購\n分眾溝通",
+                "selected_subject": "不可覆蓋固定主旨",
+            },
+            event_details={"service_intro_url": "https://example.com/service.pdf"},
+        )
+        self.assertEqual(subjects, [
+            "活動確認出席｜【零售成長論壇】活動出席確認信（Energy）"
+        ])
+        self.assertIn("我是 Omnichat 周周，也是本次與您聯繫的品牌窗口", body)
+        self.assertIn("已先為您保留席次", body)
+        self.assertIn("活動時間｜2026-08-20 14:00–16:00", body)
+        self.assertIn("活動地點｜線上直播", body)
+        self.assertIn("活動主視覺｜uploads/event.png", body)
+        self.assertIn("為了讓當天內容更貼近品牌的實際情境", body)
+        self.assertIn("• 會員回購", body)
+        self.assertIn("https://example.com/service.pdf", body)
+        self.assertTrue(cta.startswith("我很樂意先依品牌現況"))
+        self.assertTrue(body.endswith("期待活動前能先認識您，讓當天交流更有收穫😊"))
+
+    def test_attendance_confirmation_does_not_invent_topics(self):
+        subjects, body, cta = generate_email(
+            {"name": "資料不足活動"},
+            "活動前確認通知（Pre-call）",
+            {"brand": "測試品牌", "contact": "窗口", "needs": ""},
+        )
+        self.assertEqual(subjects[0], "活動確認出席｜【資料不足活動】活動出席確認信（Energy）")
+        self.assertIn("資料不足", body)
+        self.assertEqual(cta, "")
+        for unsupported in ("AI", "LINE", "CRM", "Meta", "自動化"):
+            self.assertNotIn(unsupported, body)
 
     def test_v1_banner_is_optional(self):
         _, without_banner, _ = generate_email(

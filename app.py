@@ -586,6 +586,10 @@ def email_builder_v1() -> None:
 
     st.subheader("Step 2｜選擇 Email 情境")
     scenario = st.selectbox("情境", EMAIL_SCENARIOS, key="Email_scenario")
+    if scenario == "活動前確認通知（Pre-call）":
+        st.info(
+            "此情境固定使用「活動確認出席｜【活動名稱】活動出席確認信（Energy）」主旨格式。"
+        )
     saved_subjects = [
         campaign.get(f"subject_{label}") or campaign.get(f"email_title_{label}", "")
         for label in ("a", "b", "c")
@@ -638,6 +642,7 @@ def email_builder_v1() -> None:
     needs = st.text_area("品牌需求（選填）", key="Email_needs")
 
     service_pdf_name = ""
+    service_intro_url = ""
     if scenario == "活動報名後打招呼":
         st.markdown("**Pre-call 信件附件**")
         banner_path = campaign.get("image_path", "")
@@ -657,6 +662,12 @@ def email_builder_v1() -> None:
             key=f"Email_precall_service_pdf_{campaign['id']}",
         )
         service_pdf_name = service_pdf.name if service_pdf else ""
+    elif scenario == "活動前確認通知（Pre-call）":
+        service_intro_url = st.text_input(
+            "Omnichat 服務介紹連結（選填）",
+            key=f"Email_precall_service_url_{campaign['id']}",
+            placeholder="請貼上服務介紹 PDF 或雲端檔案連結",
+        )
     st.subheader("Step 4｜產業資料引用")
     industry_context = industry_reference_selector(campaign, "Email")
 
@@ -678,9 +689,16 @@ def email_builder_v1() -> None:
                     "industry_context": industry_context,
                     "selected_subject": selected_subject,
                 },
-                event_details={"service_pdf_name": service_pdf_name},
+                event_details={
+                    "service_pdf_name": service_pdf_name,
+                    "service_intro_url": service_intro_url.strip(),
+                },
             )
-            if selected_subject and selected_subject != campaign.get("selected_subject", ""):
+            if (
+                scenario != "活動前確認通知（Pre-call）"
+                and selected_subject
+                and selected_subject != campaign.get("selected_subject", "")
+            ):
                 update_campaign(
                     campaign["id"], {**campaign, "selected_subject": selected_subject}
                 )
