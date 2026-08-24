@@ -125,12 +125,16 @@ class UiSmokeTests(unittest.TestCase):
         self.assertIn("效益式", labels)
         self.assertIn("趨勢 / 活動式", labels)
 
-    def test_email_builder_v1_has_only_simplified_fields(self):
+    def test_email_builder_has_recovered_scenarios_and_fields(self):
         app_path = Path(__file__).parents[1] / "app.py"
         app = AppTest.from_file(str(app_path)).run(timeout=10)
         app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
         self.assertEqual(app.selectbox[1].options, [
-            "陌生開發邀約", "活動前提醒", "活動後跟進", "自主報名確認", "一般開發信"
+            "陌生開發邀約", "活動報名後打招呼", "活動前交流邀約",
+            "活動審核通知", "活動出席確認", "活動前提醒", "活動後關懷",
+            "講者簡報分享", "活動回放分享", "報名未出席 Follow-up",
+            "Demo 邀約", "第二次追蹤", "最後追蹤", "活動後跟進",
+            "自主報名確認", "一般開發信",
         ])
         text_areas = [item.label for item in app.text_area]
         text_inputs = [item.label for item in app.text_input]
@@ -138,11 +142,23 @@ class UiSmokeTests(unittest.TestCase):
         self.assertIn("品牌觀察（選填）", text_areas)
         self.assertIn("品牌名稱 *", text_inputs)
         self.assertIn("窗口（選填）", text_inputs)
+        self.assertIn("品牌產業（選填）", text_inputs)
+        self.assertIn("Pre-call 紀錄（選填）", text_areas)
+        self.assertIn("品牌需求（選填）", text_areas)
         self.assertNotIn("品牌觀察來源", [item.label for item in app.selectbox])
         self.assertNotIn("活動 Landing Page 內容", text_areas)
         self.assertNotIn("活動議程", text_areas)
         self.assertEqual(app.selectbox[0].label, "選擇活動")
         self.assertIn("引用產業別資料庫", [item.label for item in app.checkbox])
+
+    def test_precall_scenario_shows_pdf_attachment_only(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
+        self.assertEqual(len(app.get("file_uploader")), 0)
+        app.selectbox[1].set_value("活動報名後打招呼").run(timeout=10)
+        uploaders = [item.label for item in app.get("file_uploader")]
+        self.assertEqual(uploaders, ["附件② Omnichat 服務介紹 PDF"])
 
     def test_email_builder_v1_has_banner_and_generate_button(self):
         app_path = Path(__file__).parents[1] / "app.py"

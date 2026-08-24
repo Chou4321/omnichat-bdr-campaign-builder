@@ -393,7 +393,11 @@ class GeneratorTests(unittest.TestCase):
 
     def test_scenario_counts(self):
         self.assertEqual(EMAIL_SCENARIOS, [
-            "陌生開發邀約", "活動前提醒", "活動後跟進", "自主報名確認", "一般開發信"
+            "陌生開發邀約", "活動報名後打招呼", "活動前交流邀約",
+            "活動審核通知", "活動出席確認", "活動前提醒", "活動後關懷",
+            "講者簡報分享", "活動回放分享", "報名未出席 Follow-up",
+            "Demo 邀約", "第二次追蹤", "最後追蹤", "活動後跟進",
+            "自主報名確認", "一般開發信",
         ])
         self.assertEqual(len(LINE_SCENARIOS), 13)
 
@@ -414,7 +418,10 @@ class GeneratorTests(unittest.TestCase):
 
     def test_five_v1_templates_are_distinct_and_grounded(self):
         bodies = []
-        for scenario in EMAIL_SCENARIOS:
+        for scenario in [
+            "陌生開發邀約", "活動前提醒", "活動後跟進",
+            "自主報名確認", "一般開發信",
+        ]:
             subjects, body, cta = generate_email(CAMPAIGN, scenario, LEAD)
             self.assertEqual(len(subjects), 3)
             self.assertTrue(
@@ -426,6 +433,44 @@ class GeneratorTests(unittest.TestCase):
             self.assertTrue(cta)
             bodies.append(body)
         self.assertEqual(len(set(bodies)), 5)
+
+    def test_recovered_email_scenarios_use_original_transition_copy(self):
+        expected = {
+            "活動前交流邀約": "活動開始前，想先了解您的需求",
+            "活動審核通知": "您的活動報名資料已完成審核",
+            "活動出席確認": "想和您確認是否能如期出席",
+            "活動後關懷": "謝謝您參與活動",
+            "講者簡報分享": "附上講者簡報重點",
+            "活動回放分享": "分享本次活動回放資訊",
+            "報名未出席 Follow-up": "當天未能與您碰面有些可惜",
+            "Demo 邀約": "若想進一步了解實際應用方式",
+            "第二次追蹤": "想再次確認先前分享的內容",
+            "最後追蹤": "這是本次最後一次跟進",
+        }
+        lead = {
+            **LEAD, "industry": "零售", "precall": "已電話交流",
+            "observation": "已確認的品牌觀察",
+        }
+        for scenario, transition in expected.items():
+            _, body, cta = generate_email(CAMPAIGN, scenario, lead)
+            self.assertIn(transition, body)
+            self.assertIn("在零售領域持續投入", body)
+            self.assertIn("已電話交流", body)
+            self.assertTrue(cta)
+
+    def test_recovered_precall_template_includes_pdf_and_banner(self):
+        campaign = {**CAMPAIGN, "image_path": "uploads/banner.png"}
+        subjects, body, cta = generate_email(
+            campaign,
+            "活動報名後打招呼",
+            {**LEAD, "selected_subject": "自訂 Pre-call 主旨"},
+            event_details={"service_pdf_name": "service.pdf"},
+        )
+        self.assertEqual(subjects, ["自訂 Pre-call 主旨"])
+        self.assertIn("收到您報名", body)
+        self.assertIn("活動 Banner｜uploads/banner.png", body)
+        self.assertIn("Omnichat 服務介紹｜service.pdf", body)
+        self.assertIn("15 分鐘交流", cta)
 
     def test_v1_banner_is_optional(self):
         _, without_banner, _ = generate_email(

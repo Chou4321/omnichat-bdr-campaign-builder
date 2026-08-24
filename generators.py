@@ -128,10 +128,59 @@ def generate_email(
     campaign: dict[str, Any], scenario: str, lead: dict[str, str],
     event_details: Optional[dict[str, Any]] = None,
 ) -> tuple[list[str], str, str]:
-    supported = {"陌生開發邀約", "活動前提醒", "活動後跟進", "自主報名確認", "一般開發信"}
-    if scenario not in supported:
+    current_scenarios = {
+        "陌生開發邀約", "活動前提醒", "活動後跟進",
+        "自主報名確認", "一般開發信",
+    }
+    recovered_scenarios = {
+        "活動報名後打招呼", "活動前交流邀約", "活動審核通知",
+        "活動出席確認", "活動後關懷", "講者簡報分享",
+        "活動回放分享", "報名未出席 Follow-up", "Demo 邀約",
+        "第二次追蹤", "最後追蹤",
+    }
+    if scenario in current_scenarios:
+        return _generate_v1_email(campaign, scenario, lead)
+    if scenario == "活動報名後打招呼":
+        return _generate_precall_email(campaign, lead, event_details or {})
+    if scenario in recovered_scenarios:
+        return _generate_recovered_email(campaign, scenario, lead)
+    else:
         raise ValueError(f"不支援的 Email 情境：{scenario}")
-    return _generate_v1_email(campaign, scenario, lead)
+
+
+def _generate_recovered_email(
+    campaign: dict[str, Any], scenario: str, lead: dict[str, str]
+) -> tuple[list[str], str, str]:
+    """Recovered deterministic templates from commit 4857935."""
+    brand = lead.get("brand") or "貴品牌"
+    contact = lead.get("contact") or "貴品牌團隊"
+    topic = campaign.get("topic") or campaign.get("name") or "活動資訊"
+    subjects = _campaign_titles(campaign, [
+        f"【{scenario}】{campaign.get('name', 'Omnichat 活動')}｜{brand}",
+        f"邀請 {brand} 交流：{topic}",
+        f"{contact} 您好｜一場與{lead.get('needs') or '會員成長'}有關的活動",
+    ])
+    selected_subject = (lead.get("selected_subject") or "").strip()
+    if selected_subject:
+        subjects = [selected_subject]
+    body = f"""{contact} 您好，
+
+我是 Omnichat 團隊。這封信想和您分享「{_campaign_context(campaign)}」。
+
+我們觀察到 {brand} 在{lead.get('industry') or '品牌經營'}領域持續投入。{lead.get('observation') or '許多品牌正積極整合會員互動與轉換流程。'}
+
+本次活動主題：{campaign.get('topic') or campaign.get('name') or '待補充'}
+活動亮點：{campaign.get('introduction') or campaign.get('highlights') or '待補充'}
+與貴品牌的可能連結：{lead.get('needs') or '期待進一步了解目前的會員經營需求。'}
+
+{_scenario_email_paragraph(scenario, campaign)}
+
+先前交流紀錄：{lead.get('precall') or '尚無'}
+
+若您方便，歡迎直接回覆此信，我會協助安排後續交流。
+
+Omnichat 團隊"""
+    return subjects, body, _scenario_cta(scenario, campaign)
 
 
 def _generate_v1_email(
@@ -346,9 +395,11 @@ def _generate_precall_email(
         return _precall_email_headlines(event_name, topic), warning, ""
 
     subjects = _campaign_titles(campaign, _precall_email_headlines(event_name, topic))
-    selected_title = event.get("selected_email_title", "")
-    if selected_title in subjects:
-        subjects = [selected_title] + [title for title in subjects if title != selected_title]
+    selected_title = (
+        lead.get("selected_subject") or event.get("selected_email_title", "")
+    ).strip()
+    if selected_title:
+        subjects = [selected_title]
     concerns = "\n".join(f"• {point}" for point in activity_points[:4])
     booking = campaign.get("booking_url") or "（請於活動管理補上預約連結）"
     banner = campaign.get("image_path") or "（請於活動管理上傳活動 Banner）"

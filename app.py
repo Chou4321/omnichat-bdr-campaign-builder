@@ -577,7 +577,7 @@ def line_message_generator() -> None:
 
 def email_builder_v1() -> None:
     st.header("Email 信件")
-    st.caption("選擇已儲存活動，使用五種固定 Template 產生 Email。")
+    st.caption("選擇已儲存活動，依不同活動階段套用固定 Template 產生 Email。")
 
     st.subheader("Step 1｜選擇活動")
     campaign = campaign_selector("Email_campaign")
@@ -633,6 +633,30 @@ def email_builder_v1() -> None:
         key="Email_observation",
         placeholder="沒有可留白，例如：近期主打中秋禮盒、官網有會員制度、近期推出新品、有 LINE 官方帳號等。",
     )
+    brand_industry = st.text_input("品牌產業（選填）", key="Email_industry")
+    precall = st.text_area("Pre-call 紀錄（選填）", key="Email_precall")
+    needs = st.text_area("品牌需求（選填）", key="Email_needs")
+
+    service_pdf_name = ""
+    if scenario == "活動報名後打招呼":
+        st.markdown("**Pre-call 信件附件**")
+        banner_path = campaign.get("image_path", "")
+        if banner_path and (BASE_DIR / banner_path).exists():
+            st.image(
+                str(BASE_DIR / banner_path),
+                caption="附件① 活動 Banner（由活動管理帶入）",
+                width=480,
+            )
+        elif banner_path:
+            st.caption(f"附件① 活動 Banner｜{banner_path}")
+        else:
+            st.warning("活動管理尚未上傳活動 Banner。")
+        service_pdf = st.file_uploader(
+            "附件② Omnichat 服務介紹 PDF",
+            type=["pdf"],
+            key=f"Email_precall_service_pdf_{campaign['id']}",
+        )
+        service_pdf_name = service_pdf.name if service_pdf else ""
     st.subheader("Step 4｜產業資料引用")
     industry_context = industry_reference_selector(campaign, "Email")
 
@@ -648,9 +672,13 @@ def email_builder_v1() -> None:
                     "brand": brand.strip(),
                     "contact": contact.strip(),
                     "observation": observation.strip(),
+                    "industry": brand_industry.strip(),
+                    "precall": precall.strip(),
+                    "needs": needs.strip(),
                     "industry_context": industry_context,
                     "selected_subject": selected_subject,
                 },
+                event_details={"service_pdf_name": service_pdf_name},
             )
             if selected_subject and selected_subject != campaign.get("selected_subject", ""):
                 update_campaign(
