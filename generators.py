@@ -1,6 +1,21 @@
+import re
 from typing import Any, Optional
 
 from storage import load_industry_templates
+
+
+_PROTECTED_SUBJECT_TOKENS = (
+    "LINE Biz-Solutions",
+    "Google Ads",
+    "Omnichat",
+    "Google",
+    "LINE",
+    "Meta",
+)
+_SUBJECT_TOKEN_PATTERN = re.compile(
+    "(" + "|".join(re.escape(token) for token in _PROTECTED_SUBJECT_TOKENS)
+    + r"|[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)"
+)
 
 
 def _campaign_industry(campaign: dict[str, Any]) -> str:
@@ -63,6 +78,7 @@ def generate_subject_suggestions(
         source_phrases[1] if len(source_phrases) > 1 else (summary or name)
     )
     core = first
+    event_label = _subject_event_label(name)
     event_date = _subject_date(campaign.get("event_date", ""))
     style = variant % 3
 
@@ -77,9 +93,9 @@ def generate_subject_suggestions(
         f"{industry}實戰交流｜{first}與{second}",
     ]
     trends = [
-        f"【{name}】{core}",
+        f"【{event_label}】{core}",
         f"【{event_date} {industry}交流】{first}" if event_date else f"【{industry}交流】{first}",
-        f"【{name}】{second}",
+        f"【{event_label}】{second}",
     ]
     return tuple(
         _subject_clip(value) for value in (questions[style], benefits[style], trends[style])
@@ -94,13 +110,24 @@ def _subject_industry(value: str) -> str:
 
 def _subject_phrase(value: str) -> str:
     phrase = " ".join(value.replace("\n", " ").split()).strip("。！？!?，,；;｜ ")
-    for separator in ("。", "！", "!", "？", "?", "，", ",", "；", ";", "｜"):
+    for separator in (" - ", " — ", "：", ":", "。", "！", "!", "？", "?", "，", ",", "；", ";", "｜"):
         phrase = phrase.split(separator, 1)[0].strip()
     for prefix in ("本次活動", "如何", "透過", "運用", "掌握", "建立", "提升", "深化", "分享"):
         if phrase.startswith(prefix) and len(phrase) > len(prefix) + 2:
             phrase = phrase[len(prefix):].strip()
             break
-    return phrase[:14].rstrip("。！？!?，,；;｜ ") or "活動核心議題"
+    return _token_safe_truncate(phrase, 16) or "活動核心議題"
+
+
+def _subject_event_label(value: str) -> str:
+    """Create a compact event label without cutting English brand/product names."""
+    label = " ".join(str(value).replace("\n", " ").split()).strip()
+    for separator in (" - ", " — ", "：", ":"):
+        head = label.split(separator, 1)[0].strip()
+        if head:
+            label = head
+            break
+    return _token_safe_truncate(label, 18) or "活動交流"
 
 
 def _subject_date(value: str) -> str:
@@ -114,7 +141,39 @@ def _subject_clip(value: str) -> str:
     if len(value) <= 32:
         return value
     suffix = "？" if value.endswith("？") else ""
-    return value[: 32 - len(suffix)].rstrip("，、；;｜ ") + suffix
+    if "｜" in value:
+        main_clause = value.split("｜", 1)[0].rstrip()
+        if 12 <= len(main_clause) <= 32:
+            return main_clause
+    return _token_safe_truncate(value, 32, suffix)
+
+
+def _token_safe_truncate(value: str, max_length: int, suffix: str = "") -> str:
+    """Trim mixed Chinese/English text while keeping English tokens indivisible."""
+    text = " ".join(str(value).split()).strip()
+    if len(text) <= max_length:
+        return text
+
+    budget = max_length - len(suffix)
+    units: list[str] = []
+    cursor = 0
+    for match in _SUBJECT_TOKEN_PATTERN.finditer(text):
+        units.extend(text[cursor:match.start()])
+        units.append(match.group(0))
+        cursor = match.end()
+    units.extend(text[cursor:])
+
+    kept: list[str] = []
+    used = 0
+    for unit in units:
+        if used + len(unit) > budget:
+            break
+        kept.append(unit)
+        used += len(unit)
+
+    result = "".join(kept).rstrip("。！？!?，,、；;｜：:×- ")
+    result = re.sub(r"(?:從|到|與|和|及)$", "", result).rstrip()
+    return result + suffix
 
 
 def _campaign_context(campaign: dict[str, Any]) -> str:

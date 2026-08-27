@@ -1,4 +1,5 @@
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -331,6 +332,35 @@ class GeneratorTests(unittest.TestCase):
             for unsupported in ("AI", "LINE", "CRM", "Meta", "自動化"):
                 if unsupported not in source:
                     self.assertNotIn(unsupported, " ".join(subjects))
+
+    def test_subject_suggestions_do_not_split_english_brand_tokens(self):
+        campaign = {
+            **CAMPAIGN,
+            "name": (
+                "Google 實體小聚 - 全通路獲客與轉換閉環："
+                "Google Ads 精準獲客 × Omnichat 對話商務"
+            ),
+            "primary_industry": "零售",
+            "summary": "從 Google Ads 精準獲客到 Omnichat 對話商務，建立全通路轉換閉環。",
+            "introduction": "分享 Google Ads 精準獲客與 Omnichat 對話商務的實際應用。",
+            "activity_points": [
+                "Google Ads 精準獲客",
+                "Omnichat 對話商務",
+                "全通路獲客與轉換閉環",
+            ],
+        }
+        subjects = generate_subject_suggestions(campaign, 0)
+        self.assertEqual(len(subjects), 3)
+        self.assertTrue(all(len(subject) <= 32 for subject in subjects))
+        combined = " ".join(subjects)
+        self.assertIn("Google Ads", combined)
+        self.assertIn("Omnichat", combined)
+        ascii_tokens = {
+            token
+            for subject in subjects
+            for token in re.findall(r"[A-Za-z]+(?:-[A-Za-z]+)*", subject)
+        }
+        self.assertTrue(ascii_tokens <= {"Google", "Ads", "Omnichat"})
 
     def test_selected_subject_is_the_email_subject(self):
         selected = "食品品牌如何建立會員成長策略？"
