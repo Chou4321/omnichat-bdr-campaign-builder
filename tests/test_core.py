@@ -81,6 +81,14 @@ PET_INDUSTRY = {
 
 
 class StoreTests(unittest.TestCase):
+    def test_event_cold_outreach_style_reference_is_versioned(self):
+        reference_path = Path(__file__).parents[1] / "data" / "email_style_references.json"
+        reference = json.loads(reference_path.read_text(encoding="utf-8"))
+        style = reference["event_cold_outreach"]
+        self.assertEqual(len(style["structure"]), 9)
+        self.assertIn("Google 台北辦公室", style["google_good_example"])
+        self.assertIn("誠摯邀請您參與", style["forbidden_phrases"])
+
     def test_supabase_credentials_reject_publishable_key(self):
         fake_secrets = {
             "supabase": {
@@ -144,6 +152,18 @@ class StoreTests(unittest.TestCase):
             reloaded = load_campaigns(path)[0]
             self.assertEqual(reloaded["subject_a"], "問題式大標")
             self.assertEqual(reloaded["selected_subject"], "效益式大標")
+
+    def test_campaign_development_hook_persists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "campaigns.json"
+            save_campaign({
+                "id": "hook-event", "name": "Google 活動",
+                "development_hook": "用 Google 辦公室作為話題 Hook",
+            }, path)
+            self.assertEqual(
+                load_campaigns(path)[0]["development_hook"],
+                "用 Google 辦公室作為話題 Hook",
+            )
 
     def test_legacy_campaign_points_are_normalized_without_data_loss(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -397,6 +417,7 @@ class GeneratorTests(unittest.TestCase):
             "primary_industry": "未指定",
             "summary": "由 Google 與 Omnichat 分享 Google Ads 精準獲客與 Ads-to-Chat 對話商務轉換。",
             "introduction": "活動於 Google 台北辦公室舉行，席次有限，採審核制。",
+            "development_hook": "活動辦在 Google 台北辦公室，希望增加話題性，最後帶回 Google Ads 獲客與轉換。",
             "activity_points": [
                 "從廣告曝光到實際轉換：Google Ads 獲客實戰",
                 "接住每一次點擊：從 Ads-to-Chat 到對話商務轉換",
@@ -408,6 +429,46 @@ class GeneratorTests(unittest.TestCase):
         self.assertEqual(trend, "📍 Google 限定邀請｜從廣告獲客到對話商務")
         self.assertEqual(len({curiosity, benefit, trend}), 3)
         self.assertTrue(all(len(subject) <= 32 for subject in (curiosity, benefit, trend)))
+
+    def test_event_cold_outreach_uses_hook_driven_bdr_master_style(self):
+        campaign = {
+            **GOOGLE_CAMPAIGN,
+            "event_date": "2026-09-23",
+            "event_time": "14:00–16:00",
+            "event_format": "實體",
+            "location": "Google 台北辦公室",
+            "partner": "Google｜Amber Chen；Omnichat｜Ariel Hu",
+            "development_hook": (
+                "活動辦在 Google 台北辦公室，希望增加話題性；"
+                "最後帶回 Google Ads 獲客與轉換。席次有限，採審核制。"
+            ),
+            "registration_url": "https://example.com/register",
+            "booking_url": "https://example.com/book",
+        }
+        subjects, body, cta = generate_email(
+            campaign, "活動前陌生開發", {"contact": "王小姐"}
+        )
+        self.assertEqual(subjects[0], "👀 想走進 Google 辦公室一探究竟嗎？")
+        expected_order = [
+            "我是 Omnichat 市場團隊的周周",
+            "廣告帶來點擊後",
+            "由 Google × Omnichat 團隊共同分享",
+            "・Google Ads 精準獲客",
+            "📍 9/23（三） 14:00–16:00｜Google 台北辦公室",
+            "👉 立即報名｜https://example.com/register",
+            "若您近期也正在思考",
+            "15 分鐘快速交流",
+            "👉 快速聯繫我｜https://example.com/book",
+        ]
+        positions = [body.index(text) for text in expected_order]
+        self.assertEqual(positions, sorted(positions))
+        for banned in (
+            "這次想邀請貴品牌參與", "活動內容與品牌近期可能關注",
+            "若您有興趣，歡迎直接回覆此信", "若希望先了解適合品牌",
+            "本活動將聚焦於", "誠摯邀請您參與",
+        ):
+            self.assertNotIn(banned, body)
+        self.assertIn("15 分鐘快速交流", cta)
 
     def test_selected_subject_is_the_email_subject(self):
         selected = "食品品牌如何建立會員成長策略？"
@@ -611,7 +672,7 @@ class GeneratorTests(unittest.TestCase):
         _, plain, _ = generate_email(CAMPAIGN, "活動前陌生開發", LEAD)
         self.assertIn("食品 / 伴手禮", referenced)
         self.assertIn("會員", referenced)
-        self.assertEqual(cta, "歡迎回覆方便時段，我再協助安排。")
+        self.assertIn("15 分鐘快速交流", cta)
         self.assertNotIn("節慶新客後續回購有限", plain)
         self.assertNotIn("LINE 好友缺乏分眾", plain)
 

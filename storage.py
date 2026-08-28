@@ -101,6 +101,7 @@ def _normalize_campaign(campaign: dict[str, Any]) -> dict[str, Any]:
         "primary_industry": normalized.get("suitable_industries", ""),
         "summary": "",
         "introduction": normalized.get("highlights", ""),
+        "development_hook": "",
         "activity_point_1": "",
         "activity_point_2": "",
         "activity_point_3": "",

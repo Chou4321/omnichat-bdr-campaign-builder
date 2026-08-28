@@ -1,4 +1,5 @@
 import re
+from datetime import date
 from typing import Any, Optional
 
 from storage import load_industry_templates
@@ -18,6 +19,18 @@ _SUBJECT_TOKEN_PATTERN = re.compile(
     "(" + "|".join(re.escape(token) for token in _PROTECTED_SUBJECT_TOKENS)
     + r"|[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)"
 )
+
+
+# Permanent tone and structure reference for 活動前陌生開發. This is a style
+# guide, not a Google-specific body template; generated copy remains grounded
+# in each campaign's own fields.
+EVENT_COLD_OUTREACH_STYLE_REFERENCE = """Dear XXX 您好，
+
+我是 Omnichat 市場團隊的周周，這次想特別邀請您走進活動現場，參與限定交流。
+
+先以一個收件者真正關心的商業問題切入，再自然帶出活動價值與 3～4 個重點；
+接著提供活動資訊、報名 CTA、品牌可能關注的經營議題與 15 分鐘交流 CTA。
+語氣像 BDR 一對一邀請，避免制式 EDM、公關稿或誇大內容。"""
 
 
 def _campaign_industry(campaign: dict[str, Any]) -> str:
@@ -72,6 +85,7 @@ def generate_subject_suggestions(
     industry = _subject_industry(_campaign_industry(campaign))
     summary = (campaign.get("summary") or "").strip()
     introduction = (campaign.get("introduction") or "").strip()
+    development_hook = (campaign.get("development_hook") or "").strip()
     source_phrases = _campaign_points(campaign)
     if not source_phrases:
         source_phrases = _intro_points(summary or introduction)
@@ -79,19 +93,20 @@ def generate_subject_suggestions(
     second = _subject_phrase(source_phrases[1] if len(source_phrases) > 1 else (summary or name))
     source = " ".join(
         str(value) for value in (
-            name, summary, introduction, campaign.get("location", ""),
+            name, summary, introduction, development_hook, campaign.get("location", ""),
             campaign.get("partner", ""), *source_phrases,
         ) if value
     )
     brand = _subject_brand_hook(source)
     location = (campaign.get("location") or "").strip()
+    hook_location = location or (development_hook if "辦公室" in development_hook else "")
     limited = any(word in source for word in ("限定", "審核制", "席次有限", "限量"))
     value = _subject_business_value(source, first, second)
     problem = _subject_business_problem(source, industry, first)
     style = variant % 3
 
     curiosity = _subject_curiosity_variants(
-        brand=brand, location=location, limited=limited,
+        brand=brand, location=hook_location, limited=limited,
         industry=industry, value=value,
     )
     benefit_primary = f"✨ {problem}"
@@ -356,39 +371,52 @@ def _generate_email_v2(
         subjects = list(generate_subject_suggestions(campaign))
         if (lead.get("selected_subject") or "").strip():
             subjects = [lead["selected_subject"].strip()]
-        invitation_reason = (
-            f"這次想邀請 {brand_phrase} 參與《{event_name}》，"
-            "活動內容與品牌近期可能關注的經營議題相當相關。"
-        )
-        activity_copy = introduction or campaign.get("summary") or ""
+        source = _activity_source(campaign, {})
+        collaboration = _campaign_collaboration_label(campaign)
+        opening = _cold_event_hook_opening(campaign, collaboration)
         observation = (lead.get("observation") or "").strip()
-        if observation:
-            activity_copy = f"{observation}\n\n{activity_copy}".strip()
-        registration_cta = (
-            f"👉 活動報名｜{registration}" if registration
-            else "若您有興趣，歡迎直接回覆此信，我再提供完整報名資訊。"
+        observation_block = f"我也留意到：{observation}" if observation else ""
+        business_question = _subject_business_problem(
+            source, industry_name or _subject_industry(_campaign_industry(campaign)),
+            _subject_phrase(points[0] if points else introduction or event_name),
         )
+        value_intro = _cold_event_value_intro(campaign, collaboration, points)
+        event_info = _cold_event_info(campaign)
+        registration_cta = f"👉 立即報名｜{registration}" if registration else ""
+        interest = _cold_event_interest(reference, campaign, points)
         exchange_cta = (
-            f"若希望先了解適合品牌的應用，也可安排 15 分鐘交流｜{booking}"
-            if booking else
-            "若希望先了解適合品牌的應用，也歡迎回覆安排 15 分鐘交流。"
+            "若方便，也很樂意在活動前安排 15 分鐘快速交流，\n"
+            "先了解目前品牌的獲客與經營方式，並分享相關應用案例供您參考。"
         )
-        exchange_cta = _reference_cta(reference) or exchange_cta
+        booking_line = (
+            f"👉 快速聯繫我｜{booking}" if booking
+            else "👉 也歡迎直接回覆方便的交流時段"
+        )
+        closing = _cold_event_closing(campaign)
         body = f"""{greeting}
 
-{invitation_reason}
+{opening}
 
-{activity_copy}
+{observation_block}
 
-【活動亮點】
-{points_block}{industry_paragraph}
+{business_question}
 
-{info_block}
+{value_intro}
+
+{points_block}
+
+{event_info}
 
 {registration_cta}
 
-{exchange_cta}{banner_block}"""
-        return subjects, _clean_email(body), exchange_cta
+{interest}
+
+{exchange_cta}
+
+{booking_line}
+
+{closing}{banner_block}"""
+        return subjects, _clean_email(body), f"{exchange_cta}\n\n{booking_line}"
 
     if scenario == "活動前確認出席通知":
         subject = f"活動確認出席｜【{event_name}】活動出席確認信（Energy）"
@@ -624,6 +652,132 @@ def _industry_personalization(reference: dict[str, Any], industry: str) -> str:
             f"{case_sentence}"
         )
     return ""
+
+
+def _campaign_collaboration_label(campaign: dict[str, Any]) -> str:
+    source = " ".join(str(campaign.get(key, "")) for key in ("name", "partner"))
+    names = []
+    for token in ("Google", "Meta", "LINE Biz-Solutions", "LINE", "Omnichat"):
+        if token in source and not any(token in existing for existing in names):
+            names.append(token)
+    if names:
+        return " × ".join(names[:2])
+    partner = (campaign.get("partner") or "").strip()
+    return partner or "Omnichat"
+
+
+def _event_date_with_weekday(value: str) -> str:
+    try:
+        parsed = date.fromisoformat(str(value))
+    except ValueError:
+        return _subject_date(value)
+    weekdays = "一二三四五六日"
+    return f"{parsed.month}/{parsed.day}（{weekdays[parsed.weekday()]}）"
+
+
+def _cold_event_hook_opening(campaign: dict[str, Any], collaboration: str) -> str:
+    date_label = _subject_date(campaign.get("event_date", ""))
+    location = (campaign.get("location") or "").strip()
+    event_format = (campaign.get("event_format") or "").strip()
+    source = " ".join(
+        str(campaign.get(key, ""))
+        for key in ("development_hook", "introduction", "summary", "name")
+    )
+    limited = any(word in source for word in ("限定", "席次有限", "審核制", "限量"))
+    if event_format == "線上":
+        first_line = f"{date_label} 一起在線上參與，" if date_label else "一起在線上參與，"
+    elif location and "辦公室" in location:
+        first_line = f"{date_label} 一起走進 {location}，" if date_label else f"一起走進 {location}，"
+    elif location:
+        first_line = f"{date_label} 一起到 {location}，" if date_label else f"一起到 {location}，"
+    else:
+        first_line = f"{date_label} 一起參與這場交流，" if date_label else "一起參與這場交流，"
+    activity_label = "限定" if limited else "專場"
+    format_label = "線上交流" if event_format == "線上" else "實體交流"
+    return (
+        "我是 Omnichat 市場團隊的周周，這次想特別邀請您\n"
+        f"{first_line}\n參與 {collaboration} {activity_label}{format_label}！"
+    )
+
+
+def _cold_event_value_intro(
+    campaign: dict[str, Any], collaboration: str, points: list[str]
+) -> str:
+    source = _activity_source(campaign, {})
+    if "Google Ads" in source:
+        starting_point = "品牌熟悉的 Google Ads 精準獲客"
+    elif points:
+        starting_point = _subject_phrase(points[0])
+    else:
+        starting_point = _subject_phrase(campaign.get("introduction") or campaign.get("name", "活動主題"))
+    return f"這次將從{starting_point}出發，\n由 {collaboration} 團隊共同分享："
+
+
+def _cold_event_info(campaign: dict[str, Any]) -> str:
+    date_label = _event_date_with_weekday(campaign.get("event_date", ""))
+    event_time = (campaign.get("event_time") or "").strip()
+    location = (campaign.get("location") or "").strip()
+    event_format = (campaign.get("event_format") or "").strip()
+    source = " ".join(
+        str(campaign.get(key, ""))
+        for key in ("development_hook", "introduction", "summary", "highlights")
+    )
+    first = " ".join(value for value in (date_label, event_time) if value)
+    if location:
+        first = f"{first}｜{location}" if first else location
+    lines = [f"📍 {first}"] if first else []
+    qualifiers = []
+    if "限定" in source:
+        qualifiers.append("限定交流")
+    elif event_format:
+        qualifiers.append(f"{event_format}活動")
+    for phrase in ("席次有限", "採審核制"):
+        if phrase in source:
+            qualifiers.append(phrase)
+    if qualifiers:
+        lines.append(f"🎟️ {'｜'.join(qualifiers)}")
+    return "\n".join(lines)
+
+
+def _cold_event_interest(
+    reference: dict[str, Any], campaign: dict[str, Any], points: list[str]
+) -> str:
+    topics = []
+    topics.extend(reference.get("pain_points", [])[:1])
+    topics.extend(reference.get("development_angles", [])[:1])
+    if len(topics) < 2:
+        source = _activity_source(campaign, {})
+        if "廣告" in source or "Google Ads" in source:
+            topics.extend(["廣告投放效益", "點擊後的轉換承接"])
+        elif "會員" in source and "分眾" in source:
+            topics.extend(["會員數據經營", "精準分眾"])
+        elif "回購" in source:
+            topics.extend(["顧客留存", "持續回購"])
+        else:
+            topics.extend(_subject_phrase(point) for point in points[:2])
+    topics = list(dict.fromkeys(topic for topic in topics if topic))[:2]
+    if not topics:
+        return "若您近期也正在思考相關的品牌成長方向，很推薦把握這次交流機會。"
+    joined = "或".join(topics)
+    industry = (reference.get("industry_name") or "").strip()
+    audience = f"如果您是{industry}品牌，近期也正在思考" if industry else "若您近期也正在思考"
+    return (
+        f"{audience}{joined}，\n"
+        "很推薦把握這次機會，看看品牌下一步可以怎麼做！"
+    )
+
+
+def _cold_event_closing(campaign: dict[str, Any]) -> str:
+    date_label = _subject_date(campaign.get("event_date", ""))
+    location = (campaign.get("location") or "").strip()
+    if campaign.get("event_format") == "線上":
+        return f"期待 {date_label} 在線上與您交流！" if date_label else "期待在線上與您交流！"
+    if date_label and location:
+        short_location = location.replace("台北辦公室", "").strip() or location
+        return f"期待 {date_label} 有機會在 {short_location} 與您見面！"
+    if date_label:
+        return f"期待 {date_label} 有機會與您見面！"
+    return "期待有機會在活動現場與您交流！"
 
 
 def _optional_activity_info(campaign: dict[str, Any]) -> str:
@@ -1138,9 +1292,14 @@ def validate_cold_email_sources(
 
 
 def _activity_source(campaign: dict[str, Any], event: dict[str, Any]) -> str:
+    stored_points = campaign.get("activity_points", [])
+    if isinstance(stored_points, str):
+        stored_points = [stored_points]
     ordered_sources = [
+        campaign.get("development_hook", ""),
         campaign.get("introduction", ""),
         campaign.get("summary", ""),
+        *stored_points,
         *[campaign.get(f"activity_point_{index}", "") for index in range(1, 5)],
         event.get("landing_page_content", ""),
         event.get("activity_intro", ""),

@@ -48,7 +48,8 @@ class CampaignIntegrationTests(unittest.TestCase):
         visual_copy = generate_banner(campaign)
 
         self.assertEqual(len(subjects), 3)
-        self.assertIn(FOOD_CAMPAIGN["introduction"], cold_body)
+        self.assertIn(FOOD_CAMPAIGN["activity_point_1"], cold_body)
+        self.assertIn("我是 Omnichat 市場團隊的周周", cold_body)
         self.assertIn(FOOD_CAMPAIGN["name"], precall_body)
         self.assertIn(FOOD_CAMPAIGN["event_date"], precall_body)
         self.assertIn(FOOD_CAMPAIGN["event_date"], line_message)

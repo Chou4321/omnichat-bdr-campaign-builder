@@ -353,6 +353,20 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
         key=f"{prefix}_introduction",
         help="填寫完整活動內容、活動定位、主辦單位、適合對象等資訊。",
     )
+    development_hook = st.text_area(
+        "💡 活動開發 Hook／我想強調的點（選填）",
+        campaign.get("development_hook", ""),
+        height=120,
+        key=f"{prefix}_development_hook",
+        help=(
+            "用自然語言說明這場活動最值得拿來開發的話題、商業問題或限定亮點。"
+            "系統會把它當作文案方向，不會逐字貼入信件。"
+        ),
+        placeholder=(
+            "例如：活動辦在 Google 台北辦公室，希望增加話題性；"
+            "開場可從走進 Google 辦公室切入，最後帶回廣告獲客與轉換。"
+        ),
+    )
     existing_points = campaign.get("activity_points", [])
     if not isinstance(existing_points, list):
         existing_points = []
@@ -484,6 +498,7 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
         # campaigns derive copy from introduction and activity_points instead.
         "summary": campaign.get("summary", ""),
         "introduction": introduction.strip(),
+        "development_hook": development_hook.strip(),
         "activity_points": points,
         # Mirror the first four lines for legacy template compatibility.
         **{

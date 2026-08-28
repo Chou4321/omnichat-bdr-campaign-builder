@@ -65,6 +65,7 @@ class UiSmokeTests(unittest.TestCase):
         areas = [item.label for item in app.text_area]
         self.assertIn("活動介紹", areas)
         self.assertIn("活動重點", areas)
+        self.assertIn("💡 活動開發 Hook／我想強調的點（選填）", areas)
         self.assertNotIn("活動一句話摘要", areas)
         self.assertNotIn("Landing Page 內容", areas)
         self.assertNotIn("活動議程", areas)
