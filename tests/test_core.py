@@ -424,9 +424,9 @@ class GeneratorTests(unittest.TestCase):
             ],
         }
         curiosity, benefit, trend = generate_subject_suggestions(campaign)
-        self.assertEqual(curiosity, "👀 想走進 Google 辦公室一探究竟嗎？")
-        self.assertEqual(benefit, "✨ 廣告點擊後怎麼接住顧客？｜Google × Omnichat")
-        self.assertEqual(trend, "📍 Google 限定邀請｜從廣告獲客到對話商務")
+        self.assertEqual(curiosity, "👀 想走進 Google 辦公室嗎？｜廣告點擊如何變顧客")
+        self.assertEqual(benefit, "✨ 廣告流量進來後，怎麼轉成可持續經營的顧客？")
+        self.assertEqual(trend, "📍 Google × Omnichat 限定小聚｜打通獲客到轉換")
         self.assertEqual(len({curiosity, benefit, trend}), 3)
         self.assertTrue(all(len(subject) <= 32 for subject in (curiosity, benefit, trend)))
 
@@ -448,7 +448,7 @@ class GeneratorTests(unittest.TestCase):
         subjects, body, cta = generate_email(
             campaign, "活動前陌生開發", {"contact": "王小姐"}
         )
-        self.assertEqual(subjects[0], "👀 想走進 Google 辦公室一探究竟嗎？")
+        self.assertEqual(subjects[0], "👀 想走進 Google 辦公室嗎？｜廣告點擊如何變顧客")
         expected_order = [
             "我是 Omnichat 市場團隊的周周",
             "廣告帶來點擊後",

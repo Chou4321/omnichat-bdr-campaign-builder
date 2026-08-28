@@ -160,10 +160,17 @@ class UiSmokeTests(unittest.TestCase):
             if item.label in ("問題式", "效益式", "趨勢 / 活動式")
         }
         self.assertEqual(
-            subjects["問題式"], "👀 想走進 Google 辦公室一探究竟嗎？"
+            subjects["問題式"],
+            "👀 想走進 Google 辦公室嗎？｜廣告點擊如何變顧客",
         )
-        self.assertIn("Google × Omnichat", subjects["效益式"])
-        self.assertIn("Google 限定邀請", subjects["趨勢 / 活動式"])
+        self.assertEqual(
+            subjects["效益式"],
+            "✨ 廣告流量進來後，怎麼轉成可持續經營的顧客？",
+        )
+        self.assertEqual(
+            subjects["趨勢 / 活動式"],
+            "📍 Google × Omnichat 限定小聚｜打通獲客到轉換",
+        )
 
     def test_email_builder_has_six_consolidated_scenarios(self):
         app_path = Path(__file__).parents[1] / "app.py"

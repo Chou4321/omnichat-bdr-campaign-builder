@@ -103,17 +103,18 @@ def generate_subject_suggestions(
     limited = any(word in source for word in ("限定", "審核制", "席次有限", "限量"))
     value = _subject_business_value(source, first, second)
     problem = _subject_business_problem(source, industry, first)
+    hook_payoff = _subject_hook_payoff(source, value)
     style = variant % 3
 
     curiosity = _subject_curiosity_variants(
         brand=brand, location=hook_location, limited=limited,
-        industry=industry, value=value,
+        industry=industry, value=value, hook_payoff=hook_payoff,
     )
     benefit_primary = f"✨ {problem}"
     if brand == "Google" and "Omnichat" in source and (
         "Google Ads" in source or "廣告" in source
     ):
-        benefit_primary = "✨ 廣告點擊後怎麼接住顧客？｜Google × Omnichat"
+        benefit_primary = "✨ 廣告流量進來後，怎麼轉成可持續經營的顧客？"
     value_object = value[1:] if value.startswith("從") else value
     value_object = value_object.replace("到", "與", 1)
     benefits = [
@@ -133,6 +134,10 @@ def generate_subject_suggestions(
         f"{collaboration}｜{value}",
         f"📍 {trend_label} 現場交流｜{value}",
     ]
+    if brand == "Google" and "Omnichat" in source and (
+        "Google Ads" in source or "廣告" in source
+    ):
+        trends[0] = "📍 Google × Omnichat 限定小聚｜打通獲客到轉換"
     return tuple(
         _subject_clip(value) for value in (curiosity[style], benefits[style], trends[style])
     )
@@ -178,12 +183,27 @@ def _subject_business_problem(source: str, industry: str, first: str) -> str:
     return f"{industry}如何把{first}轉成實際成長？"
 
 
+def _subject_hook_payoff(source: str, value: str) -> str:
+    """Turn the campaign's commercial value into a compact curiosity payoff."""
+    lowered = source.lower()
+    if "google ads" in lowered or "廣告" in source:
+        return "廣告點擊如何變顧客"
+    if "會員" in source and "回購" in source:
+        return "會員如何持續回購"
+    if "會員" in source and "分眾" in source:
+        return "會員資料如何精準分眾"
+    if "獲客" in source and "轉換" in source:
+        return "流量如何真正轉換"
+    return value
+
+
 def _subject_curiosity_variants(
-    *, brand: str, location: str, limited: bool, industry: str, value: str
+    *, brand: str, location: str, limited: bool, industry: str, value: str,
+    hook_payoff: str,
 ) -> list[str]:
     if brand and "辦公室" in location:
         return [
-            f"👀 想走進 {brand} 辦公室一探究竟嗎？",
+            f"👀 想走進 {brand} 辦公室嗎？｜{hook_payoff}",
             f"{brand} 辦公室裡，這次要談什麼成長題？",
             f"👀 {brand} 現場限定，如何接住下一步成長？",
         ]
