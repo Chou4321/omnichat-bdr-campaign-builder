@@ -55,6 +55,30 @@ CAMPAIGN = {
 }
 LEAD = {"brand": "測試品牌", "contact": "王小姐", "needs": "提升回購"}
 
+GOOGLE_CAMPAIGN = {
+    **CAMPAIGN,
+    "name": "Google 實體小聚 - 全通路獲客與轉換閉環：Google Ads 精準獲客 × Omnichat 對話商務",
+    "event_date": "2026-09-16",
+    "introduction": "分享 Google Ads 精準獲客與 Omnichat 對話商務，建立全通路轉換閉環。",
+    "activity_points": [
+        "Google Ads 精準獲客", "Omnichat 對話商務", "全通路獲客與轉換閉環",
+    ],
+}
+HEALTH_INDUSTRY = {
+    "id": "health", "industry_name": "保健品",
+    "pain_points": ["廣告新客增加，但後續回購有限"],
+    "development_angles": ["依產品需求建立會員輪廓"],
+    "omnichat_applications": ["會員分眾與再行銷"],
+    "showcase_cases": [], "common_ctas": [],
+}
+PET_INDUSTRY = {
+    "id": "pet", "industry_name": "寵物",
+    "pain_points": ["飼主與寵物產品偏好資料分散"],
+    "development_angles": ["依寵物生命階段推動回購"],
+    "omnichat_applications": ["飼主會員分眾"],
+    "showcase_cases": [], "common_ctas": [],
+}
+
 
 class StoreTests(unittest.TestCase):
     def test_supabase_credentials_reject_publishable_key(self):
@@ -294,12 +318,12 @@ class GeneratorTests(unittest.TestCase):
         self.assertNotIn("不應使用的舊重點", email_body)
 
     def test_email(self):
-        subjects, body, cta = generate_email(CAMPAIGN, "活動前提醒", LEAD)
-        self.assertEqual(len(subjects), 3)
-        self.assertEqual(subjects[0], CAMPAIGN["email_title_a"])
+        subjects, body, cta = generate_email(CAMPAIGN, "活動前確認出席通知", LEAD)
+        self.assertEqual(len(subjects), 1)
+        self.assertIn("活動確認出席", subjects[0])
         self.assertIn("王小姐", body)
-        self.assertIn(CAMPAIGN["summary"], body)
-        self.assertIn("如需協助", cta)
+        self.assertIn(CAMPAIGN["activity_point_1"], body)
+        self.assertIn("15 分鐘", cta)
 
     def test_rule_based_subject_suggestions_are_distinct_and_grounded(self):
         campaign = {
@@ -423,12 +447,8 @@ class GeneratorTests(unittest.TestCase):
 
     def test_scenario_counts(self):
         self.assertEqual(EMAIL_SCENARIOS, [
-            "陌生開發邀約", "活動報名後打招呼", "活動前交流邀約",
-            "活動審核通知", "活動出席確認", "活動前確認通知（Pre-call）",
-            "活動前提醒", "活動後關懷",
-            "講者簡報分享", "活動回放分享", "報名未出席 Follow-up",
-            "Demo 邀約", "第二次追蹤", "最後追蹤", "活動後跟進",
-            "自主報名確認", "一般開發信",
+            "活動前陌生開發", "活動前確認出席通知", "活動後關懷",
+            "活動未到場分享", "陌生開發", "二次追蹤",
         ])
         self.assertEqual(len(LINE_SCENARIOS), 13)
 
@@ -441,53 +461,38 @@ class GeneratorTests(unittest.TestCase):
         }
         _, body, _ = generate_email(
             CAMPAIGN,
-            "陌生開發邀約",
+            "活動前陌生開發",
             lead,
         )
         self.assertIn("官網目前以節慶禮盒為主要溝通內容。", body)
         self.assertNotIn("測試品牌 的產業與現況", body)
 
-    def test_five_v1_templates_are_distinct_and_grounded(self):
+    def test_six_consolidated_templates_are_distinct(self):
         bodies = []
         for scenario in [
-            "陌生開發邀約", "活動前提醒", "活動後跟進",
-            "自主報名確認", "一般開發信",
+            "活動前陌生開發", "活動前確認出席通知", "活動後關懷",
+            "活動未到場分享", "陌生開發", "二次追蹤",
         ]:
-            subjects, body, cta = generate_email(CAMPAIGN, scenario, LEAD)
-            self.assertEqual(len(subjects), 3)
-            self.assertTrue(
-                CAMPAIGN["summary"] in body
-                or CAMPAIGN["activity_point_1"] in body
-                or CAMPAIGN["introduction"] in body
-                or CAMPAIGN["name"] in body
-            )
+            campaign = CAMPAIGN if scenario.startswith("活動") else {}
+            subjects, body, cta = generate_email(campaign, scenario, LEAD)
+            self.assertGreaterEqual(len(subjects), 1)
             self.assertTrue(cta)
             bodies.append(body)
-        self.assertEqual(len(set(bodies)), 5)
+        self.assertEqual(len(set(bodies)), 6)
 
-    def test_recovered_email_scenarios_use_original_transition_copy(self):
-        expected = {
-            "活動前交流邀約": "活動開始前，想先了解您的需求",
-            "活動審核通知": "您的活動報名資料已完成審核",
-            "活動出席確認": "想和您確認是否能如期出席",
-            "活動後關懷": "謝謝您參與活動",
-            "講者簡報分享": "附上講者簡報重點",
-            "活動回放分享": "分享本次活動回放資訊",
-            "報名未出席 Follow-up": "當天未能與您碰面有些可惜",
-            "Demo 邀約": "若想進一步了解實際應用方式",
-            "第二次追蹤": "想再次確認先前分享的內容",
-            "最後追蹤": "這是本次最後一次跟進",
+    def test_legacy_email_scenarios_map_to_consolidated_templates(self):
+        mappings = {
+            "陌生開發邀約": "活動前陌生開發",
+            "活動出席確認": "活動前確認出席通知",
+            "講者簡報分享": "活動後關懷",
+            "報名未出席 Follow-up": "活動未到場分享",
+            "一般開發信": "陌生開發",
+            "第二次追蹤": "二次追蹤",
         }
-        lead = {
-            **LEAD, "industry": "零售", "precall": "已電話交流",
-            "observation": "已確認的品牌觀察",
-        }
-        for scenario, transition in expected.items():
-            _, body, cta = generate_email(CAMPAIGN, scenario, lead)
-            self.assertIn(transition, body)
-            self.assertIn("在零售領域持續投入", body)
-            self.assertIn("已電話交流", body)
-            self.assertTrue(cta)
+        for legacy, current in mappings.items():
+            legacy_result = generate_email(CAMPAIGN, legacy, LEAD)
+            current_result = generate_email(CAMPAIGN, current, LEAD)
+            self.assertEqual(legacy_result, current_result)
 
     def test_recovered_precall_template_includes_pdf_and_banner(self):
         campaign = {**CAMPAIGN, "image_path": "uploads/banner.png"}
@@ -497,11 +502,11 @@ class GeneratorTests(unittest.TestCase):
             {**LEAD, "selected_subject": "自訂 Pre-call 主旨"},
             event_details={"service_pdf_name": "service.pdf"},
         )
-        self.assertEqual(subjects, ["自訂 Pre-call 主旨"])
-        self.assertIn("收到您報名", body)
+        self.assertIn("活動確認出席", subjects[0])
+        self.assertIn("先為您暫保留席次", body)
         self.assertIn("活動 Banner｜uploads/banner.png", body)
-        self.assertIn("Omnichat 服務介紹｜service.pdf", body)
-        self.assertIn("15 分鐘交流", cta)
+        self.assertIn("service.pdf", body)
+        self.assertIn("15 分鐘", cta)
 
     def test_attendance_confirmation_precall_is_fixed_and_grounded(self):
         campaign = {**CAMPAIGN, "image_path": "uploads/event.png"}
@@ -519,15 +524,15 @@ class GeneratorTests(unittest.TestCase):
         self.assertEqual(subjects, [
             "活動確認出席｜【零售成長論壇】活動出席確認信（Energy）"
         ])
-        self.assertIn("我是 Omnichat 周周，也是本次與您聯繫的品牌窗口", body)
-        self.assertIn("已先為您保留席次", body)
+        self.assertIn("我是 Omnichat 周周，是負責品牌的窗口", body)
+        self.assertIn("先為您暫保留席次", body)
         self.assertIn("活動時間｜2026-08-20 14:00–16:00", body)
         self.assertIn("活動地點｜線上直播", body)
-        self.assertIn("活動主視覺｜uploads/event.png", body)
+        self.assertIn("活動 Banner｜uploads/event.png", body)
         self.assertIn("為了讓當天內容更貼近品牌的實際情境", body)
-        self.assertIn("• 會員回購", body)
+        self.assertIn("・掌握零售市場與消費變化", body)
         self.assertIn("https://example.com/service.pdf", body)
-        self.assertTrue(cta.startswith("我很樂意先依品牌現況"))
+        self.assertIn("15 分鐘", cta)
         self.assertTrue(body.endswith("期待活動前能先認識您，讓當天交流更有收穫😊"))
 
     def test_attendance_confirmation_does_not_invent_topics(self):
@@ -537,18 +542,19 @@ class GeneratorTests(unittest.TestCase):
             {"brand": "測試品牌", "contact": "窗口", "needs": ""},
         )
         self.assertEqual(subjects[0], "活動確認出席｜【資料不足活動】活動出席確認信（Energy）")
-        self.assertIn("資料不足", body)
-        self.assertEqual(cta, "")
+        self.assertNotIn("None", body)
+        self.assertNotIn("{聯絡人}", body)
+        self.assertTrue(cta)
         for unsupported in ("AI", "LINE", "CRM", "Meta", "自動化"):
             self.assertNotIn(unsupported, body)
 
     def test_v1_banner_is_optional(self):
         _, without_banner, _ = generate_email(
-            {"introduction": "活動介紹內容"}, "一般開發信", LEAD
+            {"introduction": "活動介紹內容"}, "活動前陌生開發", LEAD
         )
         _, with_banner, _ = generate_email(
             {"introduction": "活動介紹內容", "image_path": "uploads/banner.png"},
-            "一般開發信", LEAD,
+            "活動前陌生開發", LEAD,
         )
         self.assertNotIn("活動 Banner｜", without_banner)
         self.assertIn("活動 Banner｜uploads/banner.png", with_banner)
@@ -556,7 +562,7 @@ class GeneratorTests(unittest.TestCase):
     def test_general_email_needs_no_activity_or_observation(self):
         _, body, _ = generate_email(
             {"introduction": ""},
-            "一般開發信",
+            "陌生開發",
             {"brand": "測試品牌", "contact": "", "observation": ""},
         )
         self.assertTrue(body.startswith("您好，"))
@@ -566,6 +572,7 @@ class GeneratorTests(unittest.TestCase):
 
     def test_industry_reference_is_opt_in_and_activity_guarded(self):
         template = {
+            "industry_name": "食品 / 伴手禮",
             "pain_points": ["節慶新客後續回購有限", "LINE 好友缺乏分眾"],
             "development_angles": ["會員回購", "LINE 分眾"],
             "omnichat_applications": ["會員分眾", "AI 客服"],
@@ -577,15 +584,13 @@ class GeneratorTests(unittest.TestCase):
             "common_ctas": ["歡迎回覆方便時段，我再協助安排。"],
         }
         lead = {**LEAD, "industry_context": template}
-        _, referenced, cta = generate_email(CAMPAIGN, "陌生開發邀約", lead)
-        _, plain, _ = generate_email(CAMPAIGN, "陌生開發邀約", LEAD)
-        self.assertIn("節慶新客後續回購有限", referenced)
-        self.assertIn("簡單李", referenced)
-        self.assertIn("會員分眾", referenced)
+        _, referenced, cta = generate_email(CAMPAIGN, "活動前陌生開發", lead)
+        _, plain, _ = generate_email(CAMPAIGN, "活動前陌生開發", LEAD)
+        self.assertIn("食品 / 伴手禮", referenced)
+        self.assertIn("會員", referenced)
         self.assertEqual(cta, "歡迎回覆方便時段，我再協助安排。")
-        self.assertNotIn("LINE 好友缺乏分眾", referenced)
-        self.assertNotIn("AI 客服", referenced)
         self.assertNotIn("節慶新客後續回購有限", plain)
+        self.assertNotIn("LINE 好友缺乏分眾", plain)
 
     def test_line_industry_reference_is_short_and_opt_in(self):
         context = {
@@ -604,6 +609,98 @@ class GeneratorTests(unittest.TestCase):
         self.assertIn("檔期後新客如何轉成回購會員", referenced)
         self.assertIn("簡單李", referenced)
         self.assertNotIn("簡單李", plain)
+
+    def test_acceptance_1_event_cold_email_allows_empty_optional_fields(self):
+        _, body, _ = generate_email(
+            GOOGLE_CAMPAIGN, "活動前陌生開發", {"brand": "", "contact": ""}
+        )
+        self.assertTrue(body.startswith("您好，"))
+        self.assertIn("Google Ads", body)
+        self.assertNotIn("None", body)
+
+    def test_acceptance_2_and_3_industry_switch_rebuilds_content(self):
+        _, health, _ = generate_email(
+            GOOGLE_CAMPAIGN, "活動後關懷",
+            {"industry_context": HEALTH_INDUSTRY},
+        )
+        _, pet, _ = generate_email(
+            GOOGLE_CAMPAIGN, "活動後關懷",
+            {"industry_context": PET_INDUSTRY},
+        )
+        self.assertIn("Google Ads", health)
+        self.assertIn("保健品", health)
+        self.assertIn("寵物", pet)
+        self.assertIn("飼主", pet)
+        self.assertNotIn("保健品", pet)
+        self.assertNotIn("廣告新客增加", pet)
+
+    def test_acceptance_4_activity_switch_does_not_leak_google_content(self):
+        line_campaign = {
+            **CAMPAIGN,
+            "name": "LINE 會員經營交流",
+            "introduction": "分享 LINE 好友識別與會員分眾實務。",
+            "activity_points": ["LINE 好友識別", "會員分眾", "顧客互動"],
+        }
+        _, body, _ = generate_email(
+            line_campaign, "活動後關懷", {"industry_context": PET_INDUSTRY}
+        )
+        self.assertIn("LINE", body)
+        self.assertNotIn("Google Ads", body)
+
+    def test_acceptance_5_non_event_food_email_needs_no_activity(self):
+        food = {
+            "id": "food", "industry_name": "食品 / 伴手禮",
+            "pain_points": ["檔期新客多，但後續回購有限"],
+            "development_angles": ["一次性消費轉成會員"],
+            "omnichat_applications": ["會員分眾"],
+            "showcase_cases": [], "common_ctas": [],
+        }
+        _, body, _ = generate_email(
+            {}, "陌生開發", {"industry_context": food, "brand": "", "contact": ""}
+        )
+        self.assertIn("食品 / 伴手禮", body)
+        self.assertIn("檔期新客", body)
+        self.assertNotIn("活動資訊", body)
+
+    def test_acceptance_6_second_followup_is_shorter_than_first_email(self):
+        lead = {"industry_context": PET_INDUSTRY, "brand": "寵物品牌"}
+        _, first, _ = generate_email({}, "陌生開發", lead)
+        _, followup, _ = generate_email({}, "二次追蹤", lead)
+        self.assertLess(len(followup), len(first))
+        self.assertIn("延續前次分享", followup)
+
+    def test_acceptance_7_post_event_empty_name_has_no_placeholder(self):
+        _, body, _ = generate_email(
+            GOOGLE_CAMPAIGN, "活動後關懷", {"brand": "", "contact": ""}
+        )
+        self.assertTrue(body.startswith("您好，"))
+        for invalid in ("Dear 您好", "Dear None", "{聯絡人}", "XXX"):
+            self.assertNotIn(invalid, body)
+
+    def test_acceptance_8_subject_tokens_are_never_split(self):
+        campaign = {
+            **GOOGLE_CAMPAIGN,
+            "activity_points": [
+                "Google Ads × Omnichat",
+                "Meta × LINE Biz-Solutions",
+                "Marketing Messages × Messenger",
+            ],
+        }
+        subjects = [
+            subject
+            for variant in range(3)
+            for subject in generate_subject_suggestions(campaign, variant)
+        ]
+        allowed = {
+            "Google", "Ads", "Omnichat", "Meta", "LINE", "Biz-Solutions",
+            "Marketing", "Messages", "Messenger",
+        }
+        tokens = {
+            token for subject in subjects
+            for token in re.findall(r"[A-Za-z]+(?:-[A-Za-z]+)*", subject)
+        }
+        self.assertTrue(tokens <= allowed)
+        self.assertTrue(all(len(subject) <= 32 for subject in subjects))
 
 
 if __name__ == "__main__":

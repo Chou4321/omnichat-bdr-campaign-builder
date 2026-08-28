@@ -6,8 +6,10 @@ from storage import load_industry_templates
 
 _PROTECTED_SUBJECT_TOKENS = (
     "LINE Biz-Solutions",
+    "Marketing Messages",
     "Google Ads",
     "Omnichat",
+    "Messenger",
     "Google",
     "LINE",
     "Meta",
@@ -187,28 +189,389 @@ def generate_email(
     campaign: dict[str, Any], scenario: str, lead: dict[str, str],
     event_details: Optional[dict[str, Any]] = None,
 ) -> tuple[list[str], str, str]:
-    current_scenarios = {
-        "陌生開發邀約", "活動前提醒", "活動後跟進",
-        "自主報名確認", "一般開發信",
+    normalized = _EMAIL_SCENARIO_MAPPING.get(scenario, scenario)
+    supported = {
+        "活動前陌生開發", "活動前確認出席通知", "活動後關懷",
+        "活動未到場分享", "陌生開發", "二次追蹤",
     }
-    recovered_scenarios = {
-        "活動報名後打招呼", "活動前交流邀約", "活動審核通知",
-        "活動出席確認", "活動後關懷", "講者簡報分享",
-        "活動回放分享", "報名未出席 Follow-up", "Demo 邀約",
-        "第二次追蹤", "最後追蹤",
-    }
-    if scenario in current_scenarios:
-        return _generate_v1_email(campaign, scenario, lead)
-    if scenario == "活動前確認通知（Pre-call）":
-        return _generate_attendance_confirmation_email(
-            campaign, lead, event_details or {}
-        )
-    if scenario == "活動報名後打招呼":
-        return _generate_precall_email(campaign, lead, event_details or {})
-    if scenario in recovered_scenarios:
-        return _generate_recovered_email(campaign, scenario, lead)
-    else:
+    if normalized not in supported:
         raise ValueError(f"不支援的 Email 情境：{scenario}")
+    return _generate_email_v2(
+        campaign, normalized, lead, event_details or {}
+    )
+
+
+# Old scenario names remain callable so saved drafts/integrations do not break.
+# The UI only exposes the six consolidated scenarios.
+_EMAIL_SCENARIO_MAPPING = {
+    "陌生開發邀約": "活動前陌生開發",
+    "活動報名後打招呼": "活動前確認出席通知",
+    "活動前交流邀約": "活動前確認出席通知",
+    "活動審核通知": "活動前確認出席通知",
+    "活動出席確認": "活動前確認出席通知",
+    "活動前確認通知（Pre-call）": "活動前確認出席通知",
+    "活動前提醒": "活動前確認出席通知",
+    "活動後跟進": "活動後關懷",
+    "講者簡報分享": "活動後關懷",
+    "活動回放分享": "活動後關懷",
+    "報名未出席 Follow-up": "活動未到場分享",
+    "一般開發信": "陌生開發",
+    "Demo 邀約": "陌生開發",
+    "第二次追蹤": "二次追蹤",
+    "最後追蹤": "二次追蹤",
+    "自主報名確認": "活動前確認出席通知",
+}
+
+
+def _generate_email_v2(
+    campaign: dict[str, Any], scenario: str, lead: dict[str, Any],
+    event: dict[str, Any],
+) -> tuple[list[str], str, str]:
+    """Six deterministic Email templates using activity and Supabase industry data."""
+    is_event = scenario.startswith("活動")
+    contact = (lead.get("contact") or "").strip()
+    brand = (lead.get("brand") or "").strip()
+    greeting = f"Dear {contact} 您好，" if contact else "您好，"
+    brand_phrase = brand or "貴品牌"
+    event_name = campaign.get("name") or "本次活動"
+    introduction = (campaign.get("introduction") or "").strip()
+    points = _campaign_points(campaign) if campaign else []
+    points = [point for point in points if point != "請參考活動介紹"][:4]
+    reference = _relevant_industry_reference(
+        lead.get("industry_context"), campaign, is_event
+    )
+    industry_name = reference.get("industry_name", "")
+    industry_paragraph = _industry_personalization(reference, industry_name)
+    points_block = "\n".join(f"・{point}" for point in points)
+    info_block = _optional_activity_info(campaign)
+    banner_block = (
+        f"\n\n【活動 Banner｜{campaign['image_path']}】"
+        if campaign.get("image_path") else ""
+    )
+    booking = campaign.get("booking_url", "")
+    registration = campaign.get("registration_url", "")
+    materials = event.get("materials_url") or campaign.get("materials_url", "")
+    service = event.get("service_intro_url") or campaign.get("service_intro_url", "")
+    if not service:
+        service = event.get("service_pdf_name", "")
+    service_line = "📄 Omnichat 服務介紹（含會員經營策略與實務案例）"
+    if service:
+        service_line += f"｜{service}"
+    material_lines = []
+    if materials:
+        material_lines.append(f"📄 活動簡報／會後資料｜{materials}")
+    material_lines.append(service_line)
+    resources = "\n".join(material_lines)
+
+    if scenario == "活動前陌生開發":
+        subjects = list(generate_subject_suggestions(campaign))
+        if (lead.get("selected_subject") or "").strip():
+            subjects = [lead["selected_subject"].strip()]
+        invitation_reason = (
+            f"這次想邀請 {brand_phrase} 參與《{event_name}》，"
+            "活動內容與品牌近期可能關注的經營議題相當相關。"
+        )
+        activity_copy = introduction or campaign.get("summary") or ""
+        observation = (lead.get("observation") or "").strip()
+        if observation:
+            activity_copy = f"{observation}\n\n{activity_copy}".strip()
+        registration_cta = (
+            f"👉 活動報名｜{registration}" if registration
+            else "若您有興趣，歡迎直接回覆此信，我再提供完整報名資訊。"
+        )
+        exchange_cta = (
+            f"若希望先了解適合品牌的應用，也可安排 15 分鐘交流｜{booking}"
+            if booking else
+            "若希望先了解適合品牌的應用，也歡迎回覆安排 15 分鐘交流。"
+        )
+        exchange_cta = _reference_cta(reference) or exchange_cta
+        body = f"""{greeting}
+
+{invitation_reason}
+
+{activity_copy}
+
+【活動亮點】
+{points_block}{industry_paragraph}
+
+{info_block}
+
+{registration_cta}
+
+{exchange_cta}{banner_block}"""
+        return subjects, _clean_email(body), exchange_cta
+
+    if scenario == "活動前確認出席通知":
+        subject = f"活動確認出席｜【{event_name}】活動出席確認信（Energy）"
+        topics = points_block
+        topics_section = (
+            "\n\n為了讓當天內容更貼近品牌的實際情境，若您正在思考：\n"
+            f"{topics}" if topics else ""
+        )
+        cta = (
+            f"歡迎安排 15 分鐘快速交流 👉 {booking}" if booking
+            else "歡迎直接回覆方便時段，安排 15 分鐘快速交流。"
+        )
+        body = f"""{greeting}
+
+您好，我是 Omnichat 周周，是負責品牌的窗口。
+提醒您所報名的《{event_name}》即將舉行。
+
+先為您暫保留席次，想與您確認當天是否方便出席？
+再麻煩協助回覆，謝謝您！
+
+{info_block}{banner_block}{topics_section}{industry_paragraph}
+
+我很樂意先依品牌現況分享相關案例與應用，讓您在參與活動前能具體參考！
+{cta}
+
+{service_line}
+
+期待活動前能先認識您，讓當天交流更有收穫😊"""
+        return [subject], _clean_email(body), cta
+
+    if scenario == "活動後關懷":
+        date_label = _subject_date(campaign.get("event_date", ""))
+        subject = (
+            f"✨ 感謝參與 {date_label}《{_subject_event_label(event_name)}》"
+            "｜活動重點與簡報分享"
+        )
+        speaker = campaign.get("partner", "")
+        speaker_copy = f"{speaker} 分享了" if speaker else "活動中分享了"
+        activity_topic = introduction or campaign.get("summary") or event_name
+        insight = _commercial_insight(points, activity_topic)
+        cta_topics = "、".join(points[:3]) or "本次活動議題"
+        cta = (
+            f"歡迎回覆方便聯繫的時段，或直接與我聯繫 👉 {booking}"
+            if booking else "歡迎回覆方便聯繫的時段，我再協助安排 15 分鐘交流。"
+        )
+        body = f"""{greeting}
+
+感謝您撥空參加《{event_name}》活動，當天現場議程較緊湊，若未能與您進一步交流，先將活動重點與當日相關資料整理分享給您！
+
+本次活動中，{speaker_copy} {activity_topic}，主要聚焦於：
+
+{points_block}
+
+【活動核心商業洞察】
+{insight}{industry_paragraph}
+
+{resources}
+
+若您對活動中提到的 {cta_topics} 有興趣，很樂意安排一段 15 分鐘交流，依據目前品牌經營情境，分享相關產業應用案例供您參考。
+
+{cta}
+
+再次感謝您的參與，也期待有機會與您進一步交流！{banner_block}"""
+        selected = (lead.get("selected_subject") or "").strip()
+        return [selected or _subject_clip(subject)], _clean_email(body), cta
+
+    if scenario == "活動未到場分享":
+        subject = f"《{_subject_event_label(event_name)}》活動重點與會後資料分享"
+        cta = (
+            f"若其中有正在評估的議題，很樂意安排 15 分鐘交流｜{booking}"
+            if booking else
+            "若其中有正在評估的議題，很樂意另外安排 15 分鐘交流。"
+        )
+        body = f"""{greeting}
+
+先前有看到您報名《{event_name}》，當天很可惜未能有機會與您現場交流，因此整理本次活動幾個重點與相關資料，提供您會後參考。
+
+{points_block}{industry_paragraph}
+
+{resources}
+
+{cta}
+我也很樂意依品牌目前經營情況，分享相關案例與應用。{banner_block}"""
+        selected = (lead.get("selected_subject") or "").strip()
+        return [selected or _subject_clip(subject)], _clean_email(body), cta
+
+    if scenario == "陌生開發":
+        subject_topic = industry_name or brand or "品牌經營"
+        subject = f"想和您交流｜{subject_topic}的顧客經營方向"
+        opening = (
+            f"這次聯繫是希望和 {brand} 交流目前的品牌經營方向。"
+            if brand else "這次聯繫是希望交流目前常見的品牌經營方向。"
+        )
+        value = _outbound_value(reference)
+        cta = _reference_cta(reference) or "若您方便，歡迎直接回覆此信，安排 15 分鐘交流。"
+        body = f"""{greeting}
+
+{opening}
+
+{value}
+
+{cta}"""
+        selected = (lead.get("selected_subject") or "").strip()
+        return [selected or _subject_clip(subject)], _clean_email(body), cta
+
+    subject_topic = industry_name or brand or "品牌經營"
+    subject = f"延續前次分享｜{subject_topic}的一個實務切角"
+    new_value = _followup_value(reference)
+    cta = _reference_cta(reference) or "若近期有合適時機，歡迎回覆方便的交流時段。"
+    body = f"""{greeting}
+
+想簡短延續前次分享，不確定目前是否正好有相關規劃，因此補充一個可參考的方向：
+
+{new_value}
+
+不急著現在決定；若近期有合適時機，{cta}"""
+    selected = (lead.get("selected_subject") or "").strip()
+    return [selected or _subject_clip(subject)], _clean_email(body), cta
+
+
+def _relevant_industry_reference(
+    template: Optional[dict[str, Any]], campaign: dict[str, Any], is_event: bool
+) -> dict[str, Any]:
+    if not template:
+        return {
+            "industry_name": "", "pain_points": [], "omnichat_applications": [],
+            "development_angles": [], "showcase_cases": [], "common_ctas": [],
+        }
+
+    source = _activity_source(campaign, {}) if is_event else ""
+    concept_groups = (
+        ("廣告", "Ads", "獲客", "流量", "新客", "Meta"),
+        ("會員", "顧客", "好友", "識別", "輪廓", "資料"),
+        ("分眾", "標籤", "溝通"),
+        ("回購", "再行銷", "關懷", "留存"),
+        ("LINE", "推播", "對話"),
+        ("自動化", "旅程"),
+        ("客服", "售後", "出貨"),
+    )
+
+    def score(text: str) -> int:
+        if not source:
+            return 0
+        return sum(
+            1 for group in concept_groups
+            if any(term.lower() in source.lower() for term in group)
+            and any(term.lower() in text.lower() for term in group)
+        )
+
+    def ranked(values: list[Any], limit: int) -> list[Any]:
+        indexed = list(enumerate(values))
+        indexed.sort(
+            key=lambda pair: (-score(_reference_text(pair[1])), pair[0])
+        )
+        return [value for _, value in indexed[:limit]]
+
+    public_cases = [
+        case for case in template.get("showcase_cases", [])
+        if case.get("public", True)
+    ]
+    return {
+        "industry_name": template.get("industry_name", ""),
+        "pain_points": ranked(template.get("pain_points", []), 2),
+        "omnichat_applications": ranked(
+            template.get("omnichat_applications")
+            or template.get("omnichat_scenarios", []), 2
+        ),
+        "development_angles": ranked(template.get("development_angles", []), 2),
+        "showcase_cases": ranked(public_cases, 1),
+        "common_ctas": template.get("common_ctas", [])[:1],
+    }
+
+
+def _reference_text(value: Any) -> str:
+    if isinstance(value, dict):
+        return " ".join(str(item) for item in value.values())
+    return str(value)
+
+
+def _industry_personalization(reference: dict[str, Any], industry: str) -> str:
+    if not industry:
+        return ""
+    pain = next(iter(reference.get("pain_points", [])), "")
+    angle = next(iter(reference.get("development_angles", [])), "")
+    application = next(iter(reference.get("omnichat_applications", [])), "")
+    focus = angle or application
+    if pain and focus:
+        return (
+            f"\n\n以{industry}的經營情境來看，若目前也在面對「{pain}」，"
+            f"可進一步從「{focus}」延伸思考，讓本次活動議題更貼近實際應用。"
+        )
+    if pain:
+        return f"\n\n對{industry}而言，「{pain}」也是可從本次活動延伸交流的方向。"
+    if focus:
+        return f"\n\n若以{industry}為例，也可進一步交流「{focus}」的實際應用。"
+    return ""
+
+
+def _optional_activity_info(campaign: dict[str, Any]) -> str:
+    values = []
+    event_datetime = " ".join(
+        value for value in (
+            campaign.get("event_date", ""), campaign.get("event_time", "")
+        ) if value
+    )
+    if event_datetime:
+        values.append(f"活動時間｜{event_datetime}")
+    if campaign.get("event_format"):
+        values.append(f"活動形式｜{campaign['event_format']}")
+    if campaign.get("location"):
+        values.append(f"活動地點｜{campaign['location']}")
+    if campaign.get("event_format") != "線上" and campaign.get("address"):
+        values.append(f"活動地址｜{campaign['address']}")
+    return "【活動資訊】\n" + "\n".join(values) if values else ""
+
+
+def _commercial_insight(points: list[str], fallback: str) -> str:
+    if len(points) >= 2:
+        return (
+            f"從「{points[0]}」延伸到「{points[1]}」，重點不只是理解活動內容，"
+            "也在於如何把相關議題轉化成後續可執行的品牌經營方向。"
+        )
+    if points:
+        return f"「{points[0]}」是本次活動最適合延伸到品牌實際經營情境的核心議題。"
+    return f"「{fallback}」是本次活動可進一步延伸到品牌經營情境的核心方向。"
+
+
+def _outbound_value(reference: dict[str, Any]) -> str:
+    industry = reference.get("industry_name") or "品牌"
+    pain = next(iter(reference.get("pain_points", [])), "")
+    application = next(iter(reference.get("omnichat_applications", [])), "")
+    angle = next(iter(reference.get("development_angles", [])), "")
+    case = next(iter(reference.get("showcase_cases", [])), {})
+    if not any((pain, application, angle, case)):
+        return "Omnichat 可分享顧客互動、會員經營與分眾溝通的相關實務案例。"
+    sentences = []
+    if pain:
+        sentences.append(f"許多{industry}品牌近期也在思考「{pain}」。")
+    if angle or application:
+        sentences.append(f"這次想從「{angle or application}」分享一個可落地的應用方向。")
+    if case.get("brand_name"):
+        case_focus = case.get("key_points") or case.get("use_cases") or "相關應用"
+        sentences.append(f"也可補充 {case['brand_name']} 在「{case_focus}」上的案例供您參考。")
+    return "\n\n".join(sentences)
+
+
+def _followup_value(reference: dict[str, Any]) -> str:
+    angle = next(iter(reference.get("development_angles", [])[1:2]), "")
+    if not angle:
+        angle = next(iter(reference.get("development_angles", [])), "")
+    case = next(iter(reference.get("showcase_cases", [])), {})
+    application = next(iter(reference.get("omnichat_applications", [])), "")
+    if case.get("brand_name"):
+        focus = case.get("key_points") or case.get("use_cases") or "品牌經營"
+        return f"可參考 {case['brand_name']} 在「{focus}」上的應用方式。"
+    if angle or application:
+        return f"「{angle or application}」可作為評估下一步時的一個實務切角。"
+    return "若目前正盤點顧客經營流程，也可以先從一個明確場景小範圍交流。"
+
+
+def _reference_cta(reference: dict[str, Any]) -> str:
+    return next(iter(reference.get("common_ctas", [])), "")
+
+
+def _clean_email(value: str) -> str:
+    lines = [line.rstrip() for line in value.splitlines()]
+    compact: list[str] = []
+    for line in lines:
+        if not line and compact and compact[-1] == "":
+            continue
+        compact.append(line)
+    return "\n".join(compact).strip()
 
 
 def _generate_attendance_confirmation_email(

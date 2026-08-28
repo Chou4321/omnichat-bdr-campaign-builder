@@ -125,50 +125,36 @@ class UiSmokeTests(unittest.TestCase):
         self.assertIn("效益式", labels)
         self.assertIn("趨勢 / 活動式", labels)
 
-    def test_email_builder_has_recovered_scenarios_and_fields(self):
+    def test_email_builder_has_six_consolidated_scenarios(self):
         app_path = Path(__file__).parents[1] / "app.py"
         app = AppTest.from_file(str(app_path)).run(timeout=10)
         app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
         self.assertEqual(app.selectbox[1].options, [
-            "陌生開發邀約", "活動報名後打招呼", "活動前交流邀約",
-            "活動審核通知", "活動出席確認", "活動前確認通知（Pre-call）",
-            "活動前提醒", "活動後關懷",
-            "講者簡報分享", "活動回放分享", "報名未出席 Follow-up",
-            "Demo 邀約", "第二次追蹤", "最後追蹤", "活動後跟進",
-            "自主報名確認", "一般開發信",
+            "活動前陌生開發", "活動前確認出席通知",
+            "活動後關懷", "活動未到場分享",
         ])
-        text_areas = [item.label for item in app.text_area]
         text_inputs = [item.label for item in app.text_input]
-        self.assertNotIn("活動介紹 *", text_areas)
-        self.assertIn("品牌觀察（選填）", text_areas)
-        self.assertIn("品牌名稱 *", text_inputs)
-        self.assertIn("窗口（選填）", text_inputs)
-        self.assertIn("品牌產業（選填）", text_inputs)
-        self.assertIn("Pre-call 紀錄（選填）", text_areas)
-        self.assertIn("品牌需求（選填）", text_areas)
-        self.assertNotIn("品牌觀察來源", [item.label for item in app.selectbox])
-        self.assertNotIn("活動 Landing Page 內容", text_areas)
-        self.assertNotIn("活動議程", text_areas)
+        self.assertIn("品牌名稱（選填）", text_inputs)
+        self.assertIn("聯絡人姓名（選填）", text_inputs)
+        self.assertNotIn("品牌名稱 *", text_inputs)
         self.assertEqual(app.selectbox[0].label, "選擇活動")
-        self.assertIn("引用產業別資料庫", [item.label for item in app.checkbox])
+        self.assertIn("產業（選填）", [item.label for item in app.selectbox])
 
-    def test_precall_scenario_shows_pdf_attachment_only(self):
+    def test_non_event_email_hides_activity_selector(self):
         app_path = Path(__file__).parents[1] / "app.py"
         app = AppTest.from_file(str(app_path)).run(timeout=10)
         app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
-        self.assertEqual(len(app.get("file_uploader")), 0)
-        app.selectbox[1].set_value("活動報名後打招呼").run(timeout=10)
-        uploaders = [item.label for item in app.get("file_uploader")]
-        self.assertEqual(uploaders, ["附件② Omnichat 服務介紹 PDF"])
+        app.radio[0].set_value("非活動信件").run(timeout=10)
+        self.assertNotIn("選擇活動", [item.label for item in app.selectbox])
+        scenario = next(item for item in app.selectbox if item.label == "信件情境")
+        self.assertEqual(scenario.options, ["陌生開發", "二次追蹤"])
 
-    def test_attendance_confirmation_precall_shows_service_link(self):
+    def test_attendance_confirmation_shows_fixed_subject_notice(self):
         app_path = Path(__file__).parents[1] / "app.py"
         app = AppTest.from_file(str(app_path)).run(timeout=10)
         app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
-        app.selectbox[1].set_value("活動前確認通知（Pre-call）").run(timeout=10)
-        labels = [item.label for item in app.text_input]
-        self.assertIn("Omnichat 服務介紹連結（選填）", labels)
-        self.assertEqual(len(app.get("file_uploader")), 0)
+        app.selectbox[1].set_value("活動前確認出席通知").run(timeout=10)
+        self.assertTrue(any("活動確認出席" in item.value for item in app.info))
 
     def test_email_builder_v1_has_banner_and_generate_button(self):
         app_path = Path(__file__).parents[1] / "app.py"
@@ -178,20 +164,13 @@ class UiSmokeTests(unittest.TestCase):
         self.assertEqual(len(app.get("file_uploader")), 0)
         self.assertIn("產生 Email 信件", [item.label for item in app.button])
 
-    def test_email_industry_reference_is_optional_and_selective(self):
+    def test_email_industry_comes_directly_from_industry_database(self):
         app_path = Path(__file__).parents[1] / "app.py"
         app = AppTest.from_file(str(app_path)).run(timeout=10)
         app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
-        self.assertNotIn("選擇引用產業", [item.label for item in app.selectbox])
-        checkbox = next(item for item in app.checkbox if item.label == "引用產業別資料庫")
-        checkbox.set_value(True).run(timeout=10)
-        self.assertIn("選擇引用產業", [item.label for item in app.selectbox])
-        content_selector = next(
-            item for item in app.multiselect if item.label == "選擇引用內容"
-        )
-        self.assertEqual(content_selector.options, [
-            "常見痛點", "Omnichat 應用", "Showcase", "開發切角", "CTA"
-        ])
+        selector = next(item for item in app.selectbox if item.label == "產業（選填）")
+        self.assertEqual(selector.options[0], "不選產業")
+        self.assertIn("食品 / 伴手禮", selector.options)
 
     def test_line_industry_reference_is_limited_to_one_each(self):
         app_path = Path(__file__).parents[1] / "app.py"
@@ -208,9 +187,7 @@ class UiSmokeTests(unittest.TestCase):
         app_path = Path(__file__).parents[1] / "app.py"
         app = AppTest.from_file(str(app_path)).run(timeout=10)
         app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
-        app.selectbox[1].set_value("一般開發信").run(timeout=10)
-        brand = next(item for item in app.text_input if item.label == "品牌名稱 *")
-        brand.set_value("測試品牌")
+        app.radio[0].set_value("非活動信件").run(timeout=10)
         button = next(item for item in app.button if item.label == "產生 Email 信件")
         button.click().run(timeout=10)
         self.assertFalse(app.exception)

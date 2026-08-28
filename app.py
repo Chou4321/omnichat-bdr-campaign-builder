@@ -13,7 +13,12 @@ from generators import (
     generate_line,
     generate_subject_suggestions,
 )
-from models import Campaign, EMAIL_SCENARIOS, LINE_SCENARIOS
+from models import (
+    Campaign,
+    EVENT_EMAIL_SCENARIOS,
+    LINE_SCENARIOS,
+    NON_EVENT_EMAIL_SCENARIOS,
+)
 from line_contact_finder import (
     generate_activity_reply,
     generate_email_provided_reply,
@@ -144,6 +149,23 @@ def industry_reference_selector(campaign: dict, channel: str) -> Optional[dict]:
         "omnichat_applications": [], "common_ctas": [],
         "cautions": template.get("cautions", []),
     }
+
+
+def email_industry_selector() -> Optional[dict]:
+    """Select one live Industry Knowledge record; no second Email-only data source."""
+    templates = load_industry_templates()
+    options = ["不選產業", *[item.get("industry_name", "未命名產業") for item in templates]]
+    selected = st.selectbox(
+        "產業（選填）",
+        options,
+        key="Email_selected_industry",
+        help="選擇產業後，將自動引用產業別資料庫中的痛點、應用情境與案例。",
+    )
+    if selected == "不選產業":
+        return None
+    return next(
+        (item for item in templates if item.get("industry_name") == selected), None
+    )
 
 
 def line_lead_inputs() -> dict[str, str]:
@@ -577,136 +599,67 @@ def line_message_generator() -> None:
 
 def email_builder_v1() -> None:
     st.header("Email 信件")
-    st.caption("選擇已儲存活動，依不同活動階段套用固定 Template 產生 Email。")
+    st.caption("依信件用途選擇活動與產業資料，套用既有 Template Engine 產生 Email。")
 
-    st.subheader("Step 1｜選擇活動")
-    campaign = campaign_selector("Email_campaign")
-    if not campaign:
-        return
+    email_type = st.radio(
+        "信件類型",
+        ["活動信件", "非活動信件"],
+        horizontal=True,
+        key="Email_type",
+    )
+    is_event_email = email_type == "活動信件"
+    campaign: dict = {}
+    if is_event_email:
+        campaign = campaign_selector("Email_campaign") or {}
+        if not campaign:
+            return
+        scenarios = EVENT_EMAIL_SCENARIOS
+    else:
+        scenarios = NON_EVENT_EMAIL_SCENARIOS
 
-    st.subheader("Step 2｜選擇 Email 情境")
-    scenario = st.selectbox("情境", EMAIL_SCENARIOS, key="Email_scenario")
-    if scenario == "活動前確認通知（Pre-call）":
+    scenario = st.selectbox("信件情境", scenarios, key="Email_scenario_v2")
+    if scenario == "活動前確認出席通知":
         st.info(
             "此情境固定使用「活動確認出席｜【活動名稱】活動出席確認信（Energy）」主旨格式。"
         )
-    saved_subjects = [
-        campaign.get(f"subject_{label}") or campaign.get(f"email_title_{label}", "")
-        for label in ("a", "b", "c")
-    ]
-    subject_map = {
-        label: subject for label, subject in zip(("a", "b", "c"), saved_subjects) if subject
-    }
-    subject_options = [*subject_map, "custom"]
-    saved_selected = campaign.get("selected_subject", "")
-    default_subject_option = next(
-        (label for label, subject in subject_map.items() if subject == saved_selected),
-        "custom" if saved_selected else (next(iter(subject_map), "custom")),
-    )
-    st.markdown("**信件大標：**")
-    if not subject_map:
-        st.info("此活動尚未產生信件大標建議，可到「活動管理」產生後儲存。")
-    selected_subject_option = st.radio(
-        "選擇本封 Email Subject",
-        subject_options,
-        index=subject_options.index(default_subject_option),
-        format_func=lambda option: (
-            f"建議 {option.upper()}｜{subject_map[option]}"
-            if option in subject_map else "自訂"
-        ),
-        key=f"Email_subject_option_{campaign['id']}",
-    )
-    custom_subject_default = (
-        saved_selected if saved_selected and saved_selected not in subject_map.values() else ""
-    )
-    custom_subject = st.text_input(
-        "自訂 Subject",
-        custom_subject_default,
-        key=f"Email_custom_subject_{campaign['id']}",
-    ) if selected_subject_option == "custom" else ""
-    selected_subject = (
-        custom_subject.strip()
-        if selected_subject_option == "custom"
-        else subject_map[selected_subject_option]
-    )
-    st.subheader("Step 3｜品牌資訊")
-    brand = st.text_input("品牌名稱 *", key="Email_brand")
-    contact = st.text_input("窗口（選填）", key="Email_contact")
-    observation = st.text_area(
-        "品牌觀察（選填）",
-        key="Email_observation",
-        placeholder="沒有可留白，例如：近期主打中秋禮盒、官網有會員制度、近期推出新品、有 LINE 官方帳號等。",
-    )
-    brand_industry = st.text_input("品牌產業（選填）", key="Email_industry")
-    precall = st.text_area("Pre-call 紀錄（選填）", key="Email_precall")
-    needs = st.text_area("品牌需求（選填）", key="Email_needs")
 
-    service_pdf_name = ""
-    service_intro_url = ""
-    if scenario == "活動報名後打招呼":
-        st.markdown("**Pre-call 信件附件**")
-        banner_path = campaign.get("image_path", "")
-        if banner_path and (BASE_DIR / banner_path).exists():
-            st.image(
-                str(BASE_DIR / banner_path),
-                caption="附件① 活動 Banner（由活動管理帶入）",
-                width=480,
-            )
-        elif banner_path:
-            st.caption(f"附件① 活動 Banner｜{banner_path}")
-        else:
-            st.warning("活動管理尚未上傳活動 Banner。")
-        service_pdf = st.file_uploader(
-            "附件② Omnichat 服務介紹 PDF",
-            type=["pdf"],
-            key=f"Email_precall_service_pdf_{campaign['id']}",
-        )
-        service_pdf_name = service_pdf.name if service_pdf else ""
-    elif scenario == "活動前確認通知（Pre-call）":
-        service_intro_url = st.text_input(
-            "Omnichat 服務介紹連結（選填）",
-            key=f"Email_precall_service_url_{campaign['id']}",
-            placeholder="請貼上服務介紹 PDF 或雲端檔案連結",
-        )
-    st.subheader("Step 4｜產業資料引用")
-    industry_context = industry_reference_selector(campaign, "Email")
+    industry_context = email_industry_selector()
+    brand = st.text_input("品牌名稱（選填）", key="Email_brand_v2")
+    contact = st.text_input("聯絡人姓名（選填）", key="Email_contact_v2")
 
-    st.subheader("Step 5｜產生 Email")
+    selection_signature = (
+        email_type,
+        campaign.get("id", ""),
+        scenario,
+        (industry_context or {}).get("id", ""),
+    )
+    if st.session_state.get("Email_selection_signature") != selection_signature:
+        st.session_state.pop("Email_result", None)
+        st.session_state["Email_selection_signature"] = selection_signature
+
     if st.button("產生 Email 信件", type="primary", key="generate_Email_v1"):
-        if not brand.strip():
-            st.error("請填寫品牌名稱。")
-        else:
-            subjects, body, cta = generate_email(
-                campaign,
-                scenario,
-                {
-                    "brand": brand.strip(),
-                    "contact": contact.strip(),
-                    "observation": observation.strip(),
-                    "industry": brand_industry.strip(),
-                    "precall": precall.strip(),
-                    "needs": needs.strip(),
-                    "industry_context": industry_context,
-                    "selected_subject": selected_subject,
-                },
-                event_details={
-                    "service_pdf_name": service_pdf_name,
-                    "service_intro_url": service_intro_url.strip(),
-                },
-            )
-            if (
-                scenario != "活動前確認通知（Pre-call）"
-                and selected_subject
-                and selected_subject != campaign.get("selected_subject", "")
-            ):
-                update_campaign(
-                    campaign["id"], {**campaign, "selected_subject": selected_subject}
-                )
-            st.session_state["Email_result"] = (
-                "信件主旨：\n"
-                + (subjects[0] if subjects else selected_subject)
-                + f"\n\nEmail 內文：\n{body}\n\nCTA：\n{cta}"
-            )
+        subjects, body, cta = generate_email(
+            campaign,
+            scenario,
+            {
+                "brand": brand.strip(),
+                "contact": contact.strip(),
+                "industry_context": industry_context,
+                "is_event_email": is_event_email,
+            },
+            event_details={
+                "service_intro_url": campaign.get("service_intro_url", ""),
+                "materials_url": (
+                    campaign.get("materials_url")
+                    or campaign.get("presentation_url", "")
+                ),
+            },
+        )
+        st.session_state["Email_result"] = (
+            "信件主旨：\n"
+            + subjects[0]
+            + f"\n\nEmail 內文：\n{body}\n\nCTA：\n{cta}"
+        )
 
     result = st.session_state.get("Email_result")
     if result:
