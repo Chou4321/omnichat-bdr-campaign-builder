@@ -8,7 +8,7 @@ EMAIL_SCENARIOS = [
     "活動前陌生開發",
     "活動前確認出席通知",
     "活動後關懷",
-    "活動未到場分享",
+    "活動未出席／活動精華分享",
     "陌生開發",
     "二次追蹤",
 ]
@@ -71,6 +71,7 @@ class Campaign:
     case_industries: str = ""
     registration_url: str = ""
     booking_url: str = ""
+    materials_url: str = ""
     image_path: str = ""
     id: str = field(default_factory=lambda: str(uuid4()))
 

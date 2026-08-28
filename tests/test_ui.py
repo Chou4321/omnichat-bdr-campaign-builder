@@ -48,6 +48,7 @@ class UiSmokeTests(unittest.TestCase):
         self.assertIn("活動地址", labels)
         self.assertIn("報名連結", labels)
         self.assertIn("預約交流連結", labels)
+        self.assertIn("活動簡報整理連結（選填）", labels)
         self.assertIn("合作單位 / 講者", labels)
         self.assertNotIn("活動重點 1", labels)
         self.assertNotIn("活動重點 2", labels)
@@ -131,7 +132,7 @@ class UiSmokeTests(unittest.TestCase):
         app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
         self.assertEqual(app.selectbox[1].options, [
             "活動前陌生開發", "活動前確認出席通知",
-            "活動後關懷", "活動未到場分享",
+            "活動後關懷", "活動未出席／活動精華分享",
         ])
         text_inputs = [item.label for item in app.text_input]
         self.assertIn("品牌名稱（選填）", text_inputs)

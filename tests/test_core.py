@@ -448,7 +448,7 @@ class GeneratorTests(unittest.TestCase):
     def test_scenario_counts(self):
         self.assertEqual(EMAIL_SCENARIOS, [
             "活動前陌生開發", "活動前確認出席通知", "活動後關懷",
-            "活動未到場分享", "陌生開發", "二次追蹤",
+            "活動未出席／活動精華分享", "陌生開發", "二次追蹤",
         ])
         self.assertEqual(len(LINE_SCENARIOS), 13)
 
@@ -471,7 +471,7 @@ class GeneratorTests(unittest.TestCase):
         bodies = []
         for scenario in [
             "活動前陌生開發", "活動前確認出席通知", "活動後關懷",
-            "活動未到場分享", "陌生開發", "二次追蹤",
+            "活動未出席／活動精華分享", "陌生開發", "二次追蹤",
         ]:
             campaign = CAMPAIGN if scenario.startswith("活動") else {}
             subjects, body, cta = generate_email(campaign, scenario, LEAD)
@@ -485,7 +485,7 @@ class GeneratorTests(unittest.TestCase):
             "陌生開發邀約": "活動前陌生開發",
             "活動出席確認": "活動前確認出席通知",
             "講者簡報分享": "活動後關懷",
-            "報名未出席 Follow-up": "活動未到場分享",
+            "報名未出席 Follow-up": "活動未出席／活動精華分享",
             "一般開發信": "陌生開發",
             "第二次追蹤": "二次追蹤",
         }
@@ -701,6 +701,61 @@ class GeneratorTests(unittest.TestCase):
         }
         self.assertTrue(tokens <= allowed)
         self.assertTrue(all(len(subject) <= 32 for subject in subjects))
+
+    def test_post_event_master_template_and_material_link(self):
+        campaign = {
+            **GOOGLE_CAMPAIGN,
+            "partner": "Google 與 Omnichat",
+            "materials_url": "https://example.com/slides",
+        }
+        _, body, cta = generate_email(
+            campaign, "活動後關懷", {"industry_context": HEALTH_INDUSTRY}
+        )
+        expected_order = [
+            "感謝您撥空參加", "本次活動中", "【活動核心商業洞察】",
+            "保健品", "📄 活動簡報整理｜https://example.com/slides",
+            "📄 Omnichat 服務介紹", "15 分鐘交流", "再次感謝您的參與",
+        ]
+        positions = [body.index(value) for value in expected_order]
+        self.assertEqual(positions, sorted(positions))
+        self.assertTrue(cta)
+
+    def test_absent_event_master_template_subject_and_forbidden_phrases(self):
+        campaign = {
+            **GOOGLE_CAMPAIGN,
+            "name": "打造 Meta 廣告 × 再行銷成長模式",
+            "event_date": "2026-07-24",
+            "partner": "Meta 與 Omnichat",
+            "materials_url": "https://example.com/highlights",
+        }
+        subjects, body, cta = generate_email(
+            campaign,
+            "活動未出席／活動精華分享",
+            {"brand": "鼎通創新股份有限公司／oee education", "contact": ""},
+        )
+        self.assertEqual(subjects, [
+            "【打造 Meta 廣告 × 再行銷成長模式】7/24 活動精華整理"
+            "（鼎通創新股份有限公司／oee education）"
+        ])
+        self.assertIn("活動當天您可能因排程未能前往", body)
+        self.assertIn("【活動核心商業洞察】", body)
+        self.assertIn("📄 活動簡報整理｜https://example.com/highlights", body)
+        self.assertIn("15 分鐘交流", cta)
+        for forbidden in ("感謝您的參與", "再次感謝您的參與", "感謝撥空參加"):
+            self.assertNotIn(forbidden, body)
+
+    def test_absent_event_subject_omits_brand_parentheses_when_empty(self):
+        subjects, body, _ = generate_email(
+            {**GOOGLE_CAMPAIGN, "event_date": "2026-07-24"},
+            "活動未出席／活動精華分享",
+            {"brand": "", "contact": ""},
+        )
+        self.assertEqual(
+            subjects,
+            [f"【{GOOGLE_CAMPAIGN['name']}】7/24 活動精華整理"],
+        )
+        self.assertNotIn("（）", subjects[0])
+        self.assertNotIn("活動 Banner", body)
 
 
 if __name__ == "__main__":

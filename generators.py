@@ -192,7 +192,7 @@ def generate_email(
     normalized = _EMAIL_SCENARIO_MAPPING.get(scenario, scenario)
     supported = {
         "活動前陌生開發", "活動前確認出席通知", "活動後關懷",
-        "活動未到場分享", "陌生開發", "二次追蹤",
+        "活動未出席／活動精華分享", "陌生開發", "二次追蹤",
     }
     if normalized not in supported:
         raise ValueError(f"不支援的 Email 情境：{scenario}")
@@ -214,7 +214,8 @@ _EMAIL_SCENARIO_MAPPING = {
     "活動後跟進": "活動後關懷",
     "講者簡報分享": "活動後關懷",
     "活動回放分享": "活動後關懷",
-    "報名未出席 Follow-up": "活動未到場分享",
+    "報名未出席 Follow-up": "活動未出席／活動精華分享",
+    "活動未到場分享": "活動未出席／活動精華分享",
     "一般開發信": "陌生開發",
     "Demo 邀約": "陌生開發",
     "第二次追蹤": "二次追蹤",
@@ -234,6 +235,7 @@ def _generate_email_v2(
     greeting = f"Dear {contact} 您好，" if contact else "您好，"
     brand_phrase = brand or "貴品牌"
     event_name = campaign.get("name") or "本次活動"
+    speaker = (campaign.get("partner") or "").strip()
     introduction = (campaign.get("introduction") or "").strip()
     points = _campaign_points(campaign) if campaign else []
     points = [point for point in points if point != "請參考活動介紹"][:4]
@@ -259,7 +261,7 @@ def _generate_email_v2(
         service_line += f"｜{service}"
     material_lines = []
     if materials:
-        material_lines.append(f"📄 活動簡報／會後資料｜{materials}")
+        material_lines.append(f"📄 活動簡報整理｜{materials}")
     material_lines.append(service_line)
     resources = "\n".join(material_lines)
 
@@ -332,13 +334,16 @@ def _generate_email_v2(
 
     if scenario == "活動後關懷":
         date_label = _subject_date(campaign.get("event_date", ""))
+        subject_label = _token_safe_truncate(event_name, 12)
         subject = (
-            f"✨ 感謝參與 {date_label}《{_subject_event_label(event_name)}》"
-            "｜活動重點與簡報分享"
+            f"✨ 感謝參與 {date_label}《{subject_label}》｜重點與簡報"
         )
-        speaker = campaign.get("partner", "")
-        speaker_copy = f"{speaker} 分享了" if speaker else "活動中分享了"
         activity_topic = introduction or campaign.get("summary") or event_name
+        topic_phrase = _activity_topic_phrase(activity_topic)
+        speaker_copy = (
+            f"{speaker} 分享了「{topic_phrase}」"
+            if speaker else f"活動中分享了「{topic_phrase}」"
+        )
         insight = _commercial_insight(points, activity_topic)
         cta_topics = "、".join(points[:3]) or "本次活動議題"
         cta = (
@@ -349,7 +354,7 @@ def _generate_email_v2(
 
 感謝您撥空參加《{event_name}》活動，當天現場議程較緊湊，若未能與您進一步交流，先將活動重點與當日相關資料整理分享給您！
 
-本次活動中，{speaker_copy} {activity_topic}，主要聚焦於：
+本次活動中，{speaker_copy}，主要聚焦於：
 
 {points_block}
 
@@ -366,25 +371,49 @@ def _generate_email_v2(
         selected = (lead.get("selected_subject") or "").strip()
         return [selected or _subject_clip(subject)], _clean_email(body), cta
 
-    if scenario == "活動未到場分享":
-        subject = f"《{_subject_event_label(event_name)}》活動重點與會後資料分享"
+    if scenario == "活動未出席／活動精華分享":
+        date_label = _subject_date(campaign.get("event_date", ""))
+        brand_suffix = f"（{brand}）" if brand else ""
+        date_part = f"{date_label} " if date_label else ""
+        subject = f"【{event_name}】{date_part}活動精華整理{brand_suffix}"
+        prior_contact = (
+            "我是先前有與您通話的 Omnichat 周周。\n\n"
+            if (lead.get("precall") or "").strip() else ""
+        )
+        cta_topics = "、".join(points[:3]) or "本次活動議題"
+        insight = _commercial_insight(points, introduction or event_name)
+        host_topic = (
+            f"本次《{event_name}》由 {speaker} 分享「{_activity_topic_phrase(introduction or campaign.get('summary') or event_name)}」，主要聚焦於："
+            if speaker else
+            f"本次《{event_name}》主要分享「{_activity_topic_phrase(introduction or campaign.get('summary') or event_name)}」，並聚焦於："
+        )
+        contact_cta = (
+            f"歡迎回覆可聯繫的時段，或直接與我聯繫 👉 {booking}"
+            if booking else "歡迎回覆可聯繫的時段，我再協助安排交流。"
+        )
         cta = (
-            f"若其中有正在評估的議題，很樂意安排 15 分鐘交流｜{booking}"
-            if booking else
-            "若其中有正在評估的議題，很樂意另外安排 15 分鐘交流。"
+            f"若您對活動中提到的 {cta_topics} 有興趣，很樂意安排一段 15 分鐘交流，"
+            "依據目前品牌經營情境，分享相關產業應用案例供您參考。"
         )
         body = f"""{greeting}
 
-先前有看到您報名《{event_name}》，當天很可惜未能有機會與您現場交流，因此整理本次活動幾個重點與相關資料，提供您會後參考。
+{prior_contact}活動當天您可能因排程未能前往，我將本次活動的重點內容整理給您，希望能協助您快速掌握分享精華。
 
-{points_block}{industry_paragraph}
+{host_topic}
+
+{points_block}
+
+【活動核心商業洞察】
+{insight}{industry_paragraph}
 
 {resources}
 
 {cta}
-我也很樂意依品牌目前經營情況，分享相關案例與應用。{banner_block}"""
-        selected = (lead.get("selected_subject") or "").strip()
-        return [selected or _subject_clip(subject)], _clean_email(body), cta
+
+{contact_cta}
+
+期待後續有機會與您進一步交流！{banner_block}"""
+        return [subject], _clean_email(body), cta
 
     if scenario == "陌生開發":
         subject_topic = industry_name or brand or "品牌經營"
@@ -485,16 +514,28 @@ def _industry_personalization(reference: dict[str, Any], industry: str) -> str:
     pain = next(iter(reference.get("pain_points", [])), "")
     angle = next(iter(reference.get("development_angles", [])), "")
     application = next(iter(reference.get("omnichat_applications", [])), "")
+    case = next(iter(reference.get("showcase_cases", [])), {})
     focus = angle or application
+    case_sentence = ""
+    if case.get("brand_name"):
+        case_focus = case.get("key_points") or case.get("use_cases") or "相關應用"
+        case_sentence = f"也可參考 {case['brand_name']} 在「{case_focus}」上的實務經驗。"
     if pain and focus:
         return (
             f"\n\n以{industry}的經營情境來看，若目前也在面對「{pain}」，"
             f"可進一步從「{focus}」延伸思考，讓本次活動議題更貼近實際應用。"
+            f"{case_sentence}"
         )
     if pain:
-        return f"\n\n對{industry}而言，「{pain}」也是可從本次活動延伸交流的方向。"
+        return (
+            f"\n\n對{industry}而言，「{pain}」也是可從本次活動延伸交流的方向。"
+            f"{case_sentence}"
+        )
     if focus:
-        return f"\n\n若以{industry}為例，也可進一步交流「{focus}」的實際應用。"
+        return (
+            f"\n\n若以{industry}為例，也可進一步交流「{focus}」的實際應用。"
+            f"{case_sentence}"
+        )
     return ""
 
 
@@ -525,6 +566,13 @@ def _commercial_insight(points: list[str], fallback: str) -> str:
     if points:
         return f"「{points[0]}」是本次活動最適合延伸到品牌實際經營情境的核心議題。"
     return f"「{fallback}」是本次活動可進一步延伸到品牌經營情境的核心方向。"
+
+
+def _activity_topic_phrase(value: str) -> str:
+    phrase = str(value).strip().rstrip("。！？!?；;")
+    if phrase.startswith("分享") and len(phrase) > 4:
+        phrase = phrase[2:].strip()
+    return phrase
 
 
 def _outbound_value(reference: dict[str, Any]) -> str:

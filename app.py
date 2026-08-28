@@ -331,6 +331,12 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
     booking = col4.text_input(
         "預約交流連結", campaign.get("booking_url", ""), key=f"{prefix}_booking"
     )
+    materials_url = st.text_input(
+        "活動簡報整理連結（選填）",
+        campaign.get("materials_url") or campaign.get("presentation_url", ""),
+        key=f"{prefix}_materials_url",
+        placeholder="例如：Google Drive、Dropbox 或公開簡報連結",
+    )
     partner = st.text_input(
         "合作單位 / 講者", campaign.get("partner", ""), key=f"{prefix}_partner"
     )
@@ -471,6 +477,7 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
         "address": address.strip(),
         "registration_url": registration.strip(),
         "booking_url": booking.strip(),
+        "materials_url": materials_url.strip(),
         "partner": partner.strip(),
         "primary_industry": primary_industry,
         # Keep the legacy summary value readable for existing campaigns. New
