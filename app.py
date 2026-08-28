@@ -1,4 +1,3 @@
-from pathlib import Path
 from datetime import date
 import json
 from typing import Optional
@@ -35,10 +34,6 @@ from storage import (
     update_industry_template,
 )
 
-
-BASE_DIR = Path(__file__).parent
-UPLOADS = BASE_DIR / "uploads"
-UPLOADS.mkdir(exist_ok=True)
 
 st.set_page_config(page_title="Omnichat Campaign Builder", page_icon="🚀", layout="wide")
 st.markdown(
@@ -293,7 +288,7 @@ def line_contact_finder() -> None:
     copyable_line_output("line_finder_output")
 
 
-def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple[dict, object]:
+def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> dict:
     campaign = campaign or {}
     try:
         current_date = date.fromisoformat(campaign.get("event_date", ""))
@@ -473,15 +468,6 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
             ).strip()
         else:
             selected_subject = subjects[("a", "b", "c").index(selected_option)].strip()
-    image = st.file_uploader(
-        "活動 Banner（選填）",
-        type=["png", "jpg", "jpeg", "webp"],
-        key=f"{prefix}_banner",
-        help="僅保存並供 Email、LINE、活動圖文使用，不進行圖片辨識。",
-    )
-    if campaign.get("image_path"):
-        st.caption(f"目前 Banner：{campaign['image_path']}")
-
     values = {
         "name": name.strip(),
         "event_date": event_date.isoformat(),
@@ -517,16 +503,7 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> tuple
         "topic": campaign.get("topic", ""),
         "case_industries": campaign.get("case_industries", ""),
     }
-    return values, image
-
-
-def _save_banner(image: object, current_path: str = "") -> str:
-    if not image:
-        return current_path
-    safe_name = f"{uuid4()}_{Path(image.name).name}"
-    target = UPLOADS / safe_name
-    target.write_bytes(image.getvalue())
-    return str(target.relative_to(BASE_DIR))
+    return values
 
 
 def _show_industry_knowledge(industry_name: str) -> None:
@@ -554,13 +531,12 @@ def campaign_manager() -> None:
     campaigns = load_campaigns()
     with st.expander("＋ 新增活動", expanded=not campaigns):
         with st.form("campaign_create_form", clear_on_submit=False):
-            values, image = _campaign_form_fields("create")
+            values = _campaign_form_fields("create")
             submitted = st.form_submit_button("儲存活動", type="primary")
         if submitted:
             if not values["name"] or not values["primary_industry"]:
                 st.error("請填寫活動名稱並選擇主要產業。")
             else:
-                values["image_path"] = _save_banner(image)
                 save_campaign(Campaign(**values).to_dict())
                 st.success("活動已儲存。")
                 st.rerun()
@@ -571,7 +547,7 @@ def campaign_manager() -> None:
     for campaign in campaigns:
         with st.expander(f"{campaign['name']}｜{campaign.get('event_date', '')}"):
             with st.form(f"campaign_edit_{campaign['id']}"):
-                values, image = _campaign_form_fields(f"edit_{campaign['id']}", campaign)
+                values = _campaign_form_fields(f"edit_{campaign['id']}", campaign)
                 col1, col2 = st.columns(2)
                 update = col1.form_submit_button("儲存修改", type="primary")
                 delete = col2.form_submit_button("刪除活動")
@@ -579,7 +555,6 @@ def campaign_manager() -> None:
                 if not values["name"] or not values["primary_industry"]:
                     st.error("請填寫活動名稱並選擇主要產業。")
                 else:
-                    values["image_path"] = _save_banner(image, values["image_path"])
                     update_campaign(campaign["id"], values)
                     st.success("活動已更新。")
                     st.rerun()

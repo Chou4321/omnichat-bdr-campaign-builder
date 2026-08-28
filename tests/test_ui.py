@@ -158,13 +158,20 @@ class UiSmokeTests(unittest.TestCase):
         app.selectbox[1].set_value("活動前確認出席通知").run(timeout=10)
         self.assertTrue(any("活動確認出席" in item.value for item in app.info))
 
-    def test_email_builder_v1_has_banner_and_generate_button(self):
+    def test_email_builder_has_no_banner_uploader_and_can_generate(self):
         app_path = Path(__file__).parents[1] / "app.py"
         app = AppTest.from_file(str(app_path)).run(timeout=10)
         app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
         self.assertFalse(app.exception)
         self.assertEqual(len(app.get("file_uploader")), 0)
         self.assertIn("產生 Email 信件", [item.label for item in app.button])
+
+    def test_campaign_manager_has_no_banner_uploader(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        self.assertFalse(app.exception)
+        self.assertEqual(len(app.get("file_uploader")), 0)
+        self.assertNotIn("活動 Banner（選填）", [item.label for item in app.text_input])
 
     def test_email_industry_comes_directly_from_industry_database(self):
         app_path = Path(__file__).parents[1] / "app.py"

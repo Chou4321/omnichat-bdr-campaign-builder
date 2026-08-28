@@ -9,7 +9,7 @@
 - LINE 邀約訊息
 - 產業別資料庫
 
-活動只需建立一次。Email 與 LINE 會共用活動摘要、介紹、四個活動重點、日期時間、連結與 Banner。產業別資料庫由使用者人工維護且預設不引用；開啟引用時仍以活動內容為最高權重。
+活動只需建立一次。Email 與 LINE 會共用活動摘要、介紹、活動重點、日期時間與連結。產業別資料庫由使用者人工維護且預設不引用；開啟引用時仍以活動內容為最高權重。
 
 ## 本機啟動
 
@@ -45,7 +45,6 @@ secret_key = "sb_secret_YOUR_SECRET_KEY"
 - Supabase `industry_templates`：產業 Knowledge Base 的永久主要資料來源
 - `data/industry_templates.json`：首次移轉來源與唯讀備份，不再接收網頁寫入
 - `data/templates.json`：既有人工文案資料（保留相容性，不顯示於主導覽）
-- `uploads/`：本機上傳素材
 
 所有資料存取集中於 `storage.py`。產業資料由 Supabase 永久保存，首次連線會將 JSON 備份中尚未存在的資料移轉一次；連線失敗時會顯示錯誤，且不會回退寫入 Streamlit 本機 JSON。活動資料與上傳素材目前仍使用本機檔案。
 
