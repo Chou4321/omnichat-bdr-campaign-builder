@@ -55,5 +55,40 @@
     "highlights": "LINE 品牌經營實戰，由 LINE Biz-Solutions、TGT 與 Omnichat 共同參與；席次有限，採審核制。",
     "suitable_industries": "未指定",
     "case_industries": ""
+  },
+  {
+    "id": "recovered-20260923-google-omnichat",
+    "name": "Google 廣告精準獲客 × Omnichat AI 對話商務｜打造全通路獲客與轉換閉環",
+    "event_date": "2026-09-23",
+    "event_time": "14:00–16:00",
+    "event_format": "實體",
+    "location": "Google 台北辦公室",
+    "address": "",
+    "partner": "Google｜Amber Chen（Google 台灣客戶解決方案資深客戶經理）；Omnichat｜Ariel Hu（商務拓展經理）",
+    "primary_industry": "未指定",
+    "summary": "由 Google 與 Omnichat 分享 Google Ads 精準獲客與 Ads-to-Chat 對話商務轉換，打造全通路獲客與轉換閉環。",
+    "introduction": "Google 與 Omnichat 聯手舉辦實體小聚，從 Google Ads 獲客實戰到 Ads-to-Chat 對話商務轉換，分享如何接住每一次廣告點擊並打造全通路獲客與轉換閉環。活動於 Google 台北辦公室舉行，席次有限，採審核制。",
+    "activity_points": [
+      "從廣告曝光到實際轉換：Google Ads 獲客實戰",
+      "接住每一次點擊：從 Ads-to-Chat 到對話商務轉換",
+      "會後午茶交流 Q&A"
+    ],
+    "activity_point_1": "從廣告曝光到實際轉換：Google Ads 獲客實戰",
+    "activity_point_2": "接住每一次點擊：從 Ads-to-Chat 到對話商務轉換",
+    "activity_point_3": "會後午茶交流 Q&A",
+    "activity_point_4": "",
+    "registration_url": "",
+    "booking_url": "",
+    "materials_url": "",
+    "image_path": "uploads/20260923_google_omnichat_main_visual.jpg",
+    "subject_a": "",
+    "subject_b": "",
+    "subject_c": "",
+    "selected_subject": "",
+    "subject_generation_round": 0,
+    "topic": "Google 廣告精準獲客 × Omnichat AI 對話商務",
+    "highlights": "從 Google Ads 獲客實戰到 Ads-to-Chat 對話商務轉換，打造全通路獲客與轉換閉環。",
+    "suitable_industries": "未指定",
+    "case_industries": ""
   }
 ]
