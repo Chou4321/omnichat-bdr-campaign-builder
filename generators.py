@@ -67,7 +67,7 @@ def _campaign_titles(campaign: dict[str, Any], fallback: list[str]) -> list[str]
 def generate_subject_suggestions(
     campaign: dict[str, Any], variant: int = 0
 ) -> tuple[str, str, str]:
-    """Create three grounded B2B subjects using campaign text only."""
+    """Create three grounded B2B subjects from distinct strategic angles."""
     name = (campaign.get("name") or "活動交流").strip()
     industry = _subject_industry(_campaign_industry(campaign))
     summary = (campaign.get("summary") or "").strip()
@@ -76,32 +76,119 @@ def generate_subject_suggestions(
     if not source_phrases:
         source_phrases = _intro_points(summary or introduction)
     first = _subject_phrase(source_phrases[0] if source_phrases else name)
-    second = _subject_phrase(
-        source_phrases[1] if len(source_phrases) > 1 else (summary or name)
+    second = _subject_phrase(source_phrases[1] if len(source_phrases) > 1 else (summary or name))
+    source = " ".join(
+        str(value) for value in (
+            name, summary, introduction, campaign.get("location", ""),
+            campaign.get("partner", ""), *source_phrases,
+        ) if value
     )
-    core = first
-    event_label = _subject_event_label(name)
-    event_date = _subject_date(campaign.get("event_date", ""))
+    brand = _subject_brand_hook(source)
+    location = (campaign.get("location") or "").strip()
+    limited = any(word in source for word in ("限定", "審核制", "席次有限", "限量"))
+    value = _subject_business_value(source, first, second)
+    problem = _subject_business_problem(source, industry, first)
     style = variant % 3
 
-    questions = [
-        f"{industry}如何掌握{first}？",
-        f"{industry}下一步，{first}的關鍵在哪？",
-        f"如何從{first}走向{second}？",
-    ]
+    curiosity = _subject_curiosity_variants(
+        brand=brand, location=location, limited=limited,
+        industry=industry, value=value,
+    )
+    benefit_primary = f"✨ {problem}"
+    if brand == "Google" and "Omnichat" in source and (
+        "Google Ads" in source or "廣告" in source
+    ):
+        benefit_primary = "✨ 廣告點擊後怎麼接住顧客？｜Google × Omnichat"
+    value_object = value[1:] if value.startswith("從") else value
+    value_object = value_object.replace("到", "與", 1)
     benefits = [
-        f"從{first}到{second}｜{industry}實戰交流",
-        f"{first} × {second}｜{industry}交流",
-        f"{industry}實戰交流｜{first}與{second}",
+        benefit_primary,
+        f"如何讓{value_object}成為下一步成長動能？",
+        f"{problem}｜現場拆解實戰做法",
     ]
+    trend_label = brand or industry
+    scarcity = "限定邀請" if limited or "辦公室" in location else "實戰交流"
+    collaboration = (
+        f"{trend_label} × Omnichat"
+        if brand and brand != "Omnichat" and "Omnichat" in source
+        else f"{trend_label}交流"
+    )
     trends = [
-        f"【{event_label}】{core}",
-        f"【{event_date} {industry}交流】{first}" if event_date else f"【{industry}交流】{first}",
-        f"【{event_label}】{second}",
+        f"📍 {trend_label} {scarcity}｜{value}",
+        f"{collaboration}｜{value}",
+        f"📍 {trend_label} 現場交流｜{value}",
     ]
     return tuple(
-        _subject_clip(value) for value in (questions[style], benefits[style], trends[style])
+        _subject_clip(value) for value in (curiosity[style], benefits[style], trends[style])
     )
+
+
+def _subject_brand_hook(source: str) -> str:
+    """Pick a recognisable partner token only when it exists in campaign data."""
+    for token in ("Google", "Meta", "LINE Biz-Solutions", "LINE", "Omnichat"):
+        if token in source:
+            return token
+    return ""
+
+
+def _subject_business_value(source: str, first: str, second: str) -> str:
+    lowered = source.lower()
+    if ("google ads" in lowered or "廣告" in source) and any(
+        term in lowered for term in ("ads-to-chat", "對話商務", "轉換閉環")
+    ):
+        return "從廣告獲客到對話商務"
+    if "會員" in source and "分眾" in source:
+        return "從會員數據到精準分眾"
+    if "會員" in source and "回購" in source:
+        return "從會員經營到持續回購"
+    if "獲客" in source and "轉換" in source:
+        return "從精準獲客到有效轉換"
+    if first != second:
+        return f"從{first}到{second}"
+    return first
+
+
+def _subject_business_problem(source: str, industry: str, first: str) -> str:
+    lowered = source.lower()
+    if ("google ads" in lowered or "廣告" in source) and any(
+        term in lowered for term in ("ads-to-chat", "對話商務", "轉換")
+    ):
+        return "廣告帶來點擊後，下一步怎麼接住顧客？"
+    if "會員" in source and "回購" in source:
+        return "會員持續累積後，如何帶動下一次回購？"
+    if "會員" in source and "分眾" in source:
+        return "會員資料累積後，如何真正做到精準分眾？"
+    if "獲客" in source and "轉換" in source:
+        return "流量進站後，如何進一步提升轉換？"
+    return f"{industry}如何把{first}轉成實際成長？"
+
+
+def _subject_curiosity_variants(
+    *, brand: str, location: str, limited: bool, industry: str, value: str
+) -> list[str]:
+    if brand and "辦公室" in location:
+        return [
+            f"👀 想走進 {brand} 辦公室一探究竟嗎？",
+            f"{brand} 辦公室裡，這次要談什麼成長題？",
+            f"👀 {brand} 現場限定，如何接住下一步成長？",
+        ]
+    if brand and limited:
+        return [
+            f"👀 {brand} 限定交流，這次會談什麼？",
+            f"為什麼這場 {brand} 交流值得留意？",
+            f"👀 {brand} 限定席次，現場將分享什麼？",
+        ]
+    if brand:
+        return [
+            f"👀 {brand} 這次想談的成長關鍵是什麼？",
+            f"{brand} 現場分享，哪些實戰值得關注？",
+            f"👀 從{value}，{brand} 怎麼看？",
+        ]
+    return [
+        f"👀 {industry}下一步的成長關鍵在哪？",
+        f"這場交流，為什麼值得{industry}關注？",
+        f"👀 從{value}，有哪些新機會？",
+    ]
 
 
 def _subject_industry(value: str) -> str:

@@ -341,7 +341,8 @@ class GeneratorTests(unittest.TestCase):
         self.assertEqual(len(subjects), 3)
         self.assertEqual(len(set(subjects)), 3)
         self.assertTrue(subjects[0].endswith("？"))
-        self.assertTrue(subjects[2].startswith("【食品產業成長新曲線】"))
+        self.assertNotIn(campaign["name"], " ".join(subjects))
+        self.assertNotEqual(subjects[0].split("｜")[0], subjects[1].split("｜")[0])
         self.assertTrue(all(len(subject) <= 32 for subject in subjects))
         combined = " ".join(subjects)
         for unsupported in ("AI", "LINE", "CRM", "Meta", "自動化"):
@@ -377,7 +378,7 @@ class GeneratorTests(unittest.TestCase):
         self.assertEqual(len(subjects), 3)
         self.assertTrue(all(len(subject) <= 32 for subject in subjects))
         combined = " ".join(subjects)
-        self.assertIn("Google Ads", combined)
+        self.assertIn("Google", combined)
         self.assertIn("Omnichat", combined)
         ascii_tokens = {
             token
@@ -385,6 +386,28 @@ class GeneratorTests(unittest.TestCase):
             for token in re.findall(r"[A-Za-z]+(?:-[A-Za-z]+)*", subject)
         }
         self.assertTrue(ascii_tokens <= {"Google", "Ads", "Omnichat"})
+
+    def test_google_subjects_use_three_distinct_b2b_hooks(self):
+        campaign = {
+            "name": "Google 廣告精準獲客 × Omnichat AI 對話商務｜打造全通路獲客與轉換閉環",
+            "event_date": "2026-09-23",
+            "event_format": "實體",
+            "location": "Google 台北辦公室",
+            "partner": "Google｜Amber Chen；Omnichat｜Ariel Hu",
+            "primary_industry": "未指定",
+            "summary": "由 Google 與 Omnichat 分享 Google Ads 精準獲客與 Ads-to-Chat 對話商務轉換。",
+            "introduction": "活動於 Google 台北辦公室舉行，席次有限，採審核制。",
+            "activity_points": [
+                "從廣告曝光到實際轉換：Google Ads 獲客實戰",
+                "接住每一次點擊：從 Ads-to-Chat 到對話商務轉換",
+            ],
+        }
+        curiosity, benefit, trend = generate_subject_suggestions(campaign)
+        self.assertEqual(curiosity, "👀 想走進 Google 辦公室一探究竟嗎？")
+        self.assertEqual(benefit, "✨ 廣告點擊後怎麼接住顧客？｜Google × Omnichat")
+        self.assertEqual(trend, "📍 Google 限定邀請｜從廣告獲客到對話商務")
+        self.assertEqual(len({curiosity, benefit, trend}), 3)
+        self.assertTrue(all(len(subject) <= 32 for subject in (curiosity, benefit, trend)))
 
     def test_selected_subject_is_the_email_subject(self):
         selected = "食品品牌如何建立會員成長策略？"
