@@ -399,7 +399,6 @@ class GeneratorTests(unittest.TestCase):
         self.assertTrue(all(len(subject) <= 32 for subject in subjects))
         combined = " ".join(subjects)
         self.assertIn("Google", combined)
-        self.assertIn("Omnichat", combined)
         ascii_tokens = {
             token
             for subject in subjects
@@ -424,11 +423,65 @@ class GeneratorTests(unittest.TestCase):
             ],
         }
         curiosity, benefit, trend = generate_subject_suggestions(campaign)
-        self.assertEqual(curiosity, "👀 想走進 Google 辦公室嗎？｜廣告點擊如何變顧客")
-        self.assertEqual(benefit, "✨ 廣告流量進來後，怎麼轉成可持續經營的顧客？")
-        self.assertEqual(trend, "📍 Google × Omnichat 限定小聚｜打通獲客到轉換")
+        self.assertEqual(curiosity, "👀 想走進 Google 辦公室一探究竟嗎？")
+        self.assertEqual(benefit, "✨ 廣告帶來流量後，下一步怎麼接住顧客？")
+        self.assertEqual(trend, "📍 Google 限定邀請｜從廣告獲客到對話商務")
         self.assertEqual(len({curiosity, benefit, trend}), 3)
         self.assertTrue(all(len(subject) <= 32 for subject in (curiosity, benefit, trend)))
+
+    def test_subject_hook_analyzer_generalizes_to_line_activity(self):
+        campaign = {
+            "name": "LINE 品牌經營實戰",
+            "event_format": "實體",
+            "location": "LINE 台北辦公室",
+            "partner": "LINE Biz-Solutions；Omnichat",
+            "primary_industry": "零售",
+            "introduction": (
+                "好友持續增加，但品牌需要建立會員分眾與顧客經營。"
+                "席次有限，採審核制。"
+            ),
+            "activity_points": ["會員分眾", "深化會員關係"],
+        }
+        curiosity, benefit, trend = generate_subject_suggestions(campaign)
+        self.assertIn("LINE 台北辦公室", curiosity)
+        self.assertIn("好友一直增加", benefit)
+        self.assertIn("LINE 限定邀請", trend)
+        self.assertNotIn("Omnichat 這次想談", " ".join((curiosity, benefit, trend)))
+
+    def test_subject_hook_analyzer_generalizes_to_food_activity(self):
+        campaign = {
+            "name": "食品產業成長新曲線",
+            "event_format": "實體",
+            "location": "台北市區星級酒店",
+            "partner": "食品研究所；台灣牧場；Omnichat",
+            "primary_industry": "食品 / 伴手禮",
+            "introduction": (
+                "節慶新客增加後，品牌需要透過會員數據與分眾經營提升回購。"
+                "席次有限。"
+            ),
+            "activity_points": ["食品產業趨勢", "會員分眾", "持續回購"],
+        }
+        curiosity, benefit, trend = generate_subject_suggestions(campaign)
+        self.assertIn("星級酒店", curiosity)
+        self.assertIn("持續回購", benefit)
+        self.assertIn("食品研究所", trend)
+
+    def test_explicit_hook_question_has_highest_subject_priority(self):
+        campaign = {
+            "name": "跨界品牌交流",
+            "event_format": "實體",
+            "location": "台北活動空間",
+            "partner": "合作夥伴；Omnichat",
+            "primary_industry": "零售",
+            "development_hook": (
+                "希望用『顧客買過一次之後，下一次互動在哪裡？』作為開發 Hook，"
+                "最後帶回會員回購。"
+            ),
+            "introduction": "分享會員經營與回購實務。",
+            "activity_points": ["會員經營", "提升回購"],
+        }
+        curiosity, _, _ = generate_subject_suggestions(campaign)
+        self.assertEqual(curiosity, "👀 顧客買過一次之後，下一次互動在哪裡？")
 
     def test_event_cold_outreach_uses_hook_driven_bdr_master_style(self):
         campaign = {
@@ -448,7 +501,7 @@ class GeneratorTests(unittest.TestCase):
         subjects, body, cta = generate_email(
             campaign, "活動前陌生開發", {"contact": "王小姐"}
         )
-        self.assertEqual(subjects[0], "👀 想走進 Google 辦公室嗎？｜廣告點擊如何變顧客")
+        self.assertEqual(subjects[0], "👀 想走進 Google 辦公室一探究竟嗎？")
         expected_order = [
             "我是 Omnichat 市場團隊的周周",
             "廣告帶來點擊後",

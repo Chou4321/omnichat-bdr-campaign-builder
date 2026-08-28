@@ -80,7 +80,24 @@ def _campaign_titles(campaign: dict[str, Any], fallback: list[str]) -> list[str]
 def generate_subject_suggestions(
     campaign: dict[str, Any], variant: int = 0
 ) -> tuple[str, str, str]:
-    """Create three grounded B2B subjects from distinct strategic angles."""
+    """Create three BDR subjects after ranking the campaign's strongest hook."""
+    analysis = _analyze_bdr_subject_hook(campaign)
+    style = variant % 3
+    subjects = (
+        analysis["curiosity_variants"][style],
+        analysis["benefit_variants"][style],
+        analysis["trend_variants"][style],
+    )
+    return tuple(_subject_clip(subject) for subject in subjects)
+
+
+def _analyze_bdr_subject_hook(campaign: dict[str, Any]) -> dict[str, Any]:
+    """Rank recipient-relevant hooks before rendering any subject line.
+
+    This is deliberately deterministic: activity data remains the only source,
+    while the optional development_hook guides priority without being copied
+    wholesale into the result.
+    """
     name = (campaign.get("name") or "活動交流").strip()
     industry = _subject_industry(_campaign_industry(campaign))
     summary = (campaign.get("summary") or "").strip()
@@ -97,50 +114,102 @@ def generate_subject_suggestions(
             campaign.get("partner", ""), *source_phrases,
         ) if value
     )
-    brand = _subject_brand_hook(source)
     location = (campaign.get("location") or "").strip()
-    hook_location = location or (development_hook if "辦公室" in development_hook else "")
+    partner = (campaign.get("partner") or "").strip()
+    external_partner = _subject_external_partner(partner, location, name)
+    venue = _subject_special_venue(location, external_partner)
     limited = any(word in source for word in ("限定", "審核制", "席次有限", "限量"))
     value = _subject_business_value(source, first, second)
     problem = _subject_business_problem(source, industry, first)
     hook_payoff = _subject_hook_payoff(source, value)
-    style = variant % 3
-
+    explicit_question = _subject_explicit_hook_question(development_hook)
     curiosity = _subject_curiosity_variants(
-        brand=brand, location=hook_location, limited=limited,
-        industry=industry, value=value, hook_payoff=hook_payoff,
+        external_partner=external_partner,
+        venue=venue,
+        limited=limited,
+        industry=industry,
+        hook_payoff=hook_payoff,
+        problem=problem,
+        explicit_question=explicit_question,
     )
-    benefit_primary = f"✨ {problem}"
-    if brand == "Google" and "Omnichat" in source and (
-        "Google Ads" in source or "廣告" in source
-    ):
-        benefit_primary = "✨ 廣告流量進來後，怎麼轉成可持續經營的顧客？"
-    value_object = value[1:] if value.startswith("從") else value
-    value_object = value_object.replace("到", "與", 1)
-    benefits = [
-        benefit_primary,
-        f"如何讓{value_object}成為下一步成長動能？",
-        f"{problem}｜現場拆解實戰做法",
-    ]
-    trend_label = brand or industry
-    scarcity = "限定邀請" if limited or "辦公室" in location else "實戰交流"
+    benefits = _subject_benefit_variants(source, problem, hook_payoff)
+    trend_label = _subject_display_partner(external_partner) or industry
+    scarcity = "限定邀請" if limited or venue else "實戰交流"
     collaboration = (
         f"{trend_label} × Omnichat"
-        if brand and brand != "Omnichat" and "Omnichat" in source
-        else f"{trend_label}交流"
+        if external_partner and "Omnichat" in source
+        else trend_label
     )
+    format_label = "實體小聚" if campaign.get("event_format") == "實體" else "線上交流"
     trends = [
         f"📍 {trend_label} {scarcity}｜{value}",
-        f"{collaboration}｜{value}",
+        f"📍 {collaboration} {format_label}｜{value}",
         f"📍 {trend_label} 現場交流｜{value}",
     ]
-    if brand == "Google" and "Omnichat" in source and (
-        "Google Ads" in source or "廣告" in source
-    ):
-        trends[0] = "📍 Google × Omnichat 限定小聚｜打通獲客到轉換"
-    return tuple(
-        _subject_clip(value) for value in (curiosity[style], benefits[style], trends[style])
-    )
+    return {
+        "primary_hook_type": (
+            "explicit_hook" if development_hook
+            else "special_venue" if venue
+            else "external_partner" if external_partner
+            else "scarcity" if limited
+            else "business_problem"
+        ),
+        "external_partner": external_partner,
+        "special_venue": venue,
+        "limited": limited,
+        "business_problem": problem,
+        "business_value": value,
+        "curiosity_variants": curiosity,
+        "benefit_variants": benefits,
+        "trend_variants": trends,
+    }
+
+
+def _subject_external_partner(partner: str, location: str, name: str) -> str:
+    """Prefer a recognisable external host; Omnichat is never the first hook."""
+    partner_source = f"{partner} {location} {name}"
+    for token in ("Google", "Meta", "LINE Biz-Solutions", "LINE"):
+        if token in partner_source:
+            return token
+    for raw in re.split(r"[、,，；;&＆×\n]+", partner):
+        candidate = raw.strip()
+        candidate = candidate.split("｜", 1)[0].strip()
+        candidate = re.sub(r"[（(].*?[）)]", "", candidate).strip()
+        if candidate and "Omnichat" not in candidate:
+            return _token_safe_truncate(candidate, 14)
+    return ""
+
+
+def _subject_special_venue(location: str, external_partner: str) -> str:
+    """Return only venues with real invitation value, not generic locations."""
+    if not location or location in ("線上", "線上直播", "待確認"):
+        return ""
+    venue_terms = ("辦公室", "總部", "園區", "實驗室", "旗艦店", "門市", "酒店", "飯店")
+    if not any(term in location for term in venue_terms):
+        return ""
+    if external_partner and external_partner in location and "辦公室" in location:
+        return f"{external_partner} 辦公室"
+    return _token_safe_truncate(location, 16)
+
+
+def _subject_display_partner(external_partner: str) -> str:
+    """Use the clearest compact identity when a formal partner name is long."""
+    if external_partner == "LINE Biz-Solutions":
+        return "LINE"
+    return external_partner
+
+
+def _subject_explicit_hook_question(development_hook: str) -> str:
+    """Use an explicit BDR question when the user supplied one in the Hook."""
+    if not development_hook:
+        return ""
+    quoted = re.search(r"[「『\"]([^」』\"]+[？?])[」』\"]", development_hook)
+    if quoted:
+        return quoted.group(1).replace("?", "？").strip()
+    question = re.search(r"([^。；;\n]{5,40}[？?])", development_hook)
+    if question:
+        return question.group(1).replace("?", "？").strip(" ，,")
+    return ""
 
 
 def _subject_brand_hook(source: str) -> str:
@@ -197,32 +266,86 @@ def _subject_hook_payoff(source: str, value: str) -> str:
     return value
 
 
-def _subject_curiosity_variants(
-    *, brand: str, location: str, limited: bool, industry: str, value: str,
-    hook_payoff: str,
+def _subject_benefit_variants(
+    source: str, problem: str, hook_payoff: str
 ) -> list[str]:
-    if brand and "辦公室" in location:
+    """Speak from the recipient's business problem, never a product feature."""
+    lowered = source.lower()
+    if "google ads" in lowered or "廣告" in source:
         return [
-            f"👀 想走進 {brand} 辦公室嗎？｜{hook_payoff}",
-            f"{brand} 辦公室裡，這次要談什麼成長題？",
-            f"👀 {brand} 現場限定，如何接住下一步成長？",
+            "✨ 廣告帶來流量後，下一步怎麼接住顧客？",
+            "流量進來之後，怎麼真正留下顧客？",
+            "每一次廣告點擊，怎麼走向後續轉換？",
         ]
-    if brand and limited:
+    if ("好友" in source or "line" in lowered) and "會員" in source:
         return [
-            f"👀 {brand} 限定交流，這次會談什麼？",
-            f"為什麼這場 {brand} 交流值得留意？",
-            f"👀 {brand} 限定席次，現場將分享什麼？",
+            "好友一直增加，為什麼真正能經營的會員還是不夠？",
+            "好友加入之後，怎麼變成能持續經營的會員？",
+            "LINE 好友累積後，下一步怎麼深化會員關係？",
         ]
-    if brand:
+    if "會員" in source and "回購" in source:
         return [
-            f"👀 {brand} 這次想談的成長關鍵是什麼？",
-            f"{brand} 現場分享，哪些實戰值得關注？",
-            f"👀 從{value}，{brand} 怎麼看？",
+            "新客進來後，怎麼讓會員願意持續回購？",
+            "檔期帶來新客，下一次回購要怎麼發生？",
+            "會員持續累積，為什麼回購還是沒有跟上？",
+        ]
+    if "會員" in source and "分眾" in source:
+        return [
+            "會員資料累積後，怎麼真正做到精準分眾？",
+            "知道會員是誰之後，下一步怎麼持續互動？",
+            "會員持續增加，品牌怎麼做出更精準的溝通？",
         ]
     return [
-        f"👀 {industry}下一步的成長關鍵在哪？",
-        f"這場交流，為什麼值得{industry}關注？",
-        f"👀 從{value}，有哪些新機會？",
+        f"✨ {problem}",
+        f"{hook_payoff}，品牌下一步該怎麼做？",
+        f"{problem.rstrip('？')}，有哪些實戰做法？",
+    ]
+
+
+def _subject_curiosity_variants(
+    *, external_partner: str, venue: str, limited: bool, industry: str,
+    hook_payoff: str, problem: str, explicit_question: str,
+) -> list[str]:
+    if explicit_question:
+        return [
+            f"👀 {explicit_question}",
+            f"這場限定交流，為什麼從{hook_payoff}談起？",
+            f"👀 {hook_payoff}，現場會怎麼拆解？",
+        ]
+    if external_partner and "辦公室" in venue:
+        return [
+            f"👀 想走進 {venue}一探究竟嗎？",
+            f"這次在{venue}，品牌可以帶走什麼？",
+            f"👀 {external_partner}現場限定，會怎麼解開這道題？",
+        ]
+    if venue:
+        return [
+            f"👀 這場交流為什麼選在{venue}？",
+            f"走進{venue}，品牌可以帶走什麼？",
+            f"👀 在{venue}，這次要解開什麼問題？",
+        ]
+    if external_partner and limited:
+        return [
+            f"👀 {external_partner}限定交流，品牌可以帶走什麼？",
+            f"為什麼這場{external_partner}交流採限定邀請？",
+            f"👀 和{external_partner}現場交流，這次會拆解什麼？",
+        ]
+    if external_partner:
+        return [
+            f"👀 和{external_partner}現場交流，品牌可以帶走什麼？",
+            f"{external_partner}分享的實戰，哪一題最值得關注？",
+            f"👀 {hook_payoff}，{external_partner}會怎麼看？",
+        ]
+    if limited:
+        return [
+            "👀 這場限定交流，品牌可以帶走什麼？",
+            f"為什麼這場交流要從{hook_payoff}談起？",
+            f"👀 {problem.rstrip('？')}，現場會怎麼拆解？",
+        ]
+    return [
+        f"👀 {hook_payoff}，為什麼現在值得重新思考？",
+        f"這場交流，會怎麼回答{industry}正在面對的問題？",
+        f"👀 {problem.rstrip('？')}，這次從哪裡開始？",
     ]
 
 

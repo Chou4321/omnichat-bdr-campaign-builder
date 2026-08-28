@@ -161,15 +161,15 @@ class UiSmokeTests(unittest.TestCase):
         }
         self.assertEqual(
             subjects["問題式"],
-            "👀 想走進 Google 辦公室嗎？｜廣告點擊如何變顧客",
+            "👀 想走進 Google 辦公室一探究竟嗎？",
         )
         self.assertEqual(
             subjects["效益式"],
-            "✨ 廣告流量進來後，怎麼轉成可持續經營的顧客？",
+            "✨ 廣告帶來流量後，下一步怎麼接住顧客？",
         )
         self.assertEqual(
             subjects["趨勢 / 活動式"],
-            "📍 Google × Omnichat 限定小聚｜打通獲客到轉換",
+            "📍 Google 限定邀請｜從廣告獲客到對話商務",
         )
 
     def test_email_builder_has_six_consolidated_scenarios(self):
