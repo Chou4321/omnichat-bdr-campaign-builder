@@ -127,6 +127,44 @@ class UiSmokeTests(unittest.TestCase):
         self.assertIn("效益式", labels)
         self.assertIn("趨勢 / 活動式", labels)
 
+    def test_activity_subject_generation_receives_hook_location_and_partner(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        app = AppTest.from_file(str(app_path)).run(timeout=10)
+        text_inputs = {}
+        for item in app.text_input:
+            text_inputs.setdefault(item.label, item)
+        text_inputs["活動名稱 *"].set_value(
+            "Google 廣告精準獲客 × Omnichat 對話商務"
+        )
+        text_inputs["活動地點"].set_value("Google 台北辦公室")
+        text_inputs["合作單位 / 講者"].set_value("Google；Omnichat")
+        text_areas = {}
+        for item in app.text_area:
+            text_areas.setdefault(item.label, item)
+        text_areas["活動介紹"].set_value(
+            "從 Google Ads 獲客到 Ads-to-Chat 對話商務，席次有限，採審核制。"
+        )
+        text_areas["活動重點"].set_value(
+            "Google Ads 精準獲客\n接住每一次廣告點擊\n打造全通路轉換閉環"
+        )
+        text_areas["💡 活動開發 Hook／我想強調的點（選填）"].set_value(
+            "活動辦在 Google 台北辦公室，希望用走進 Google 辦公室作為話題。"
+        )
+        next(
+            item for item in app.button if item.label == "產生 3 個信件大標"
+        ).click().run(timeout=10)
+        self.assertFalse(app.exception)
+        subjects = {
+            item.label: item.value
+            for item in app.text_input
+            if item.label in ("問題式", "效益式", "趨勢 / 活動式")
+        }
+        self.assertEqual(
+            subjects["問題式"], "👀 想走進 Google 辦公室一探究竟嗎？"
+        )
+        self.assertIn("Google × Omnichat", subjects["效益式"])
+        self.assertIn("Google 限定邀請", subjects["趨勢 / 活動式"])
+
     def test_email_builder_has_six_consolidated_scenarios(self):
         app_path = Path(__file__).parents[1] / "app.py"
         app = AppTest.from_file(str(app_path)).run(timeout=10)

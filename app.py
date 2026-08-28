@@ -404,9 +404,13 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> dict:
             generated = generate_subject_suggestions({
                 "name": name.strip(),
                 "event_date": event_date.isoformat(),
+                "event_format": event_format,
+                "location": location.strip(),
+                "partner": partner.strip(),
                 "primary_industry": primary_industry,
                 "summary": campaign.get("summary", ""),
                 "introduction": introduction.strip(),
+                "development_hook": development_hook.strip(),
                 "activity_points": points,
             }, st.session_state[round_key])
             for label, value in zip(("a", "b", "c"), generated):
