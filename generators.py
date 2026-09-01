@@ -114,10 +114,11 @@ def _analyze_bdr_subject_hook(campaign: dict[str, Any]) -> dict[str, Any]:
             campaign.get("partner", ""), *source_phrases,
         ) if value
     )
+    is_online = _campaign_is_online(campaign)
     location = (campaign.get("location") or "").strip()
     partner = (campaign.get("partner") or "").strip()
     external_partner = _subject_external_partner(partner, location, name)
-    venue = _subject_special_venue(location, external_partner)
+    venue = "" if is_online else _subject_special_venue(location, external_partner)
     limited = any(word in source for word in ("限定", "審核制", "席次有限", "限量"))
     value = _subject_business_value(source, first, second)
     problem = _subject_business_problem(source, industry, first)
@@ -131,6 +132,7 @@ def _analyze_bdr_subject_hook(campaign: dict[str, Any]) -> dict[str, Any]:
         hook_payoff=hook_payoff,
         problem=problem,
         explicit_question=explicit_question,
+        is_online=is_online,
     )
     benefits = _subject_benefit_variants(source, problem, hook_payoff)
     trend_label = _subject_display_partner(external_partner) or industry
@@ -140,11 +142,11 @@ def _analyze_bdr_subject_hook(campaign: dict[str, Any]) -> dict[str, Any]:
         if external_partner and "Omnichat" in source
         else trend_label
     )
-    format_label = "實體小聚" if campaign.get("event_format") == "實體" else "線上交流"
+    format_label = "線上交流" if is_online else "實體小聚"
     trends = [
         f"📍 {trend_label} {scarcity}｜{value}",
         f"📍 {collaboration} {format_label}｜{value}",
-        f"📍 {trend_label} 現場交流｜{value}",
+        f"📍 {trend_label} {'線上專場' if is_online else '現場交流'}｜{value}",
     ]
     return {
         "primary_hook_type": (
@@ -304,13 +306,15 @@ def _subject_benefit_variants(
 
 def _subject_curiosity_variants(
     *, external_partner: str, venue: str, limited: bool, industry: str,
-    hook_payoff: str, problem: str, explicit_question: str,
+    hook_payoff: str, problem: str, explicit_question: str, is_online: bool,
 ) -> list[str]:
+    interaction = "線上會怎麼拆解" if is_online else "現場會怎麼拆解"
+    partner_interaction = "線上交流" if is_online else "現場交流"
     if explicit_question:
         return [
             f"👀 {explicit_question}",
             f"這場限定交流，為什麼從{hook_payoff}談起？",
-            f"👀 {hook_payoff}，現場會怎麼拆解？",
+            f"👀 {hook_payoff}，{interaction}？",
         ]
     if external_partner and "辦公室" in venue:
         return [
@@ -328,11 +332,11 @@ def _subject_curiosity_variants(
         return [
             f"👀 {external_partner}限定交流，品牌可以帶走什麼？",
             f"為什麼這場{external_partner}交流採限定邀請？",
-            f"👀 和{external_partner}現場交流，這次會拆解什麼？",
+            f"👀 和{external_partner}{partner_interaction}，這次會拆解什麼？",
         ]
     if external_partner:
         return [
-            f"👀 和{external_partner}現場交流，品牌可以帶走什麼？",
+            f"👀 和{external_partner}{partner_interaction}，品牌可以帶走什麼？",
             f"{external_partner}分享的實戰，哪一題最值得關注？",
             f"👀 {hook_payoff}，{external_partner}會怎麼看？",
         ]
@@ -340,7 +344,7 @@ def _subject_curiosity_variants(
         return [
             "👀 這場限定交流，品牌可以帶走什麼？",
             f"為什麼這場交流要從{hook_payoff}談起？",
-            f"👀 {problem.rstrip('？')}，現場會怎麼拆解？",
+            f"👀 {problem.rstrip('？')}，{interaction}？",
         ]
     return [
         f"👀 {hook_payoff}，為什麼現在值得重新思考？",
@@ -475,6 +479,7 @@ def _generate_email_v2(
 ) -> tuple[list[str], str, str]:
     """Six deterministic Email templates using activity and Supabase industry data."""
     is_event = scenario.startswith("活動")
+    is_online = _campaign_is_online(campaign)
     contact = (lead.get("contact") or "").strip()
     brand = (lead.get("brand") or "").strip()
     greeting = f"Dear {contact} 您好，" if contact else "您好，"
@@ -572,12 +577,17 @@ def _generate_email_v2(
             f"歡迎安排 15 分鐘快速交流 👉 {booking}" if booking
             else "歡迎直接回覆方便時段，安排 15 分鐘快速交流。"
         )
+        attendance_intro = (
+            f"提醒您所報名的《{event_name}》線上活動即將舉行。\n\n"
+            "已為您保留線上參與名額，想與您確認當天是否方便上線參與？"
+            if is_online else
+            f"提醒您所報名的《{event_name}》即將舉行。\n\n"
+            "先為您暫保留席次，想與您確認當天是否方便出席？"
+        )
         body = f"""{greeting}
 
 您好，我是 Omnichat 周周，是負責品牌的窗口。
-提醒您所報名的《{event_name}》即將舉行。
-
-先為您暫保留席次，想與您確認當天是否方便出席？
+{attendance_intro}
 再麻煩協助回覆，謝謝您！
 
 {info_block}{banner_block}{topics_section}{industry_paragraph}
@@ -608,9 +618,16 @@ def _generate_email_v2(
             f"歡迎回覆方便聯繫的時段，或直接與我聯繫 👉 {booking}"
             if booking else "歡迎回覆方便聯繫的時段，我再協助安排 15 分鐘交流。"
         )
+        post_event_opening = (
+            f"感謝您撥空參與《{event_name}》線上活動！本次聚焦{topic_phrase}，"
+            "將活動重點與相關資料整理分享給您，方便後續快速回顧。"
+            if is_online else
+            f"感謝您撥空參加《{event_name}》活動，當天現場議程較緊湊，"
+            "若未能與您進一步交流，先將活動重點與當日相關資料整理分享給您！"
+        )
         body = f"""{greeting}
 
-感謝您撥空參加《{event_name}》活動，當天現場議程較緊湊，若未能與您進一步交流，先將活動重點與當日相關資料整理分享給您！
+{post_event_opening}
 
 本次活動中，{speaker_copy}，主要聚焦於：
 
@@ -653,9 +670,16 @@ def _generate_email_v2(
             f"若您對活動中提到的 {cta_topics} 有興趣，很樂意安排一段 15 分鐘交流，"
             "依據目前品牌經營情境，分享相關產業應用案例供您參考。"
         )
+        absent_opening = (
+            "您當天可能因排程未能參與線上活動，我將本次分享重點與相關資料整理給您，"
+            "方便快速掌握活動精華。"
+            if is_online else
+            "活動當天您可能因排程未能前往，我將本次活動的重點內容整理給您，"
+            "希望能協助您快速掌握分享精華。"
+        )
         body = f"""{greeting}
 
-{prior_contact}活動當天您可能因排程未能前往，我將本次活動的重點內容整理給您，希望能協助您快速掌握分享精華。
+{prior_contact}{absent_opening}
 
 {host_topic}
 
@@ -818,16 +842,22 @@ def _event_date_with_weekday(value: str) -> str:
     return f"{parsed.month}/{parsed.day}（{weekdays[parsed.weekday()]}）"
 
 
+def _campaign_is_online(campaign: dict[str, Any]) -> bool:
+    """Treat activity format as an upstream template condition."""
+    value = str(campaign.get("event_format") or "").strip().lower()
+    return value in {"線上", "線上活動", "online", "virtual"}
+
+
 def _cold_event_hook_opening(campaign: dict[str, Any], collaboration: str) -> str:
     date_label = _subject_date(campaign.get("event_date", ""))
     location = (campaign.get("location") or "").strip()
-    event_format = (campaign.get("event_format") or "").strip()
+    is_online = _campaign_is_online(campaign)
     source = " ".join(
         str(campaign.get(key, ""))
         for key in ("development_hook", "introduction", "summary", "name")
     )
     limited = any(word in source for word in ("限定", "席次有限", "審核制", "限量"))
-    if event_format == "線上":
+    if is_online:
         first_line = f"{date_label} 一起在線上參與，" if date_label else "一起在線上參與，"
     elif location and "辦公室" in location:
         first_line = f"{date_label} 一起走進 {location}，" if date_label else f"一起走進 {location}，"
@@ -836,7 +866,7 @@ def _cold_event_hook_opening(campaign: dict[str, Any], collaboration: str) -> st
     else:
         first_line = f"{date_label} 一起參與這場交流，" if date_label else "一起參與這場交流，"
     activity_label = "限定" if limited else "專場"
-    format_label = "線上交流" if event_format == "線上" else "實體交流"
+    format_label = "線上交流" if is_online else "實體交流"
     return (
         "我是 Omnichat 市場團隊的周周，這次想特別邀請您\n"
         f"{first_line}\n參與 {collaboration} {activity_label}{format_label}！"
@@ -861,18 +891,22 @@ def _cold_event_info(campaign: dict[str, Any]) -> str:
     event_time = (campaign.get("event_time") or "").strip()
     location = (campaign.get("location") or "").strip()
     event_format = (campaign.get("event_format") or "").strip()
+    is_online = _campaign_is_online(campaign)
     source = " ".join(
         str(campaign.get(key, ""))
         for key in ("development_hook", "introduction", "summary", "highlights")
     )
     first = " ".join(value for value in (date_label, event_time) if value)
-    if location:
+    if location and not is_online:
         first = f"{first}｜{location}" if first else location
-    lines = [f"📍 {first}"] if first else []
+    icon = "💻" if is_online else "📍"
+    lines = [f"{icon} {first}"] if first else []
+    if is_online:
+        lines.append("活動形式｜線上活動")
     qualifiers = []
     if "限定" in source:
         qualifiers.append("限定交流")
-    elif event_format:
+    elif event_format and not is_online:
         qualifiers.append(f"{event_format}活動")
     for phrase in ("席次有限", "採審核制"):
         if phrase in source:
@@ -913,7 +947,7 @@ def _cold_event_interest(
 def _cold_event_closing(campaign: dict[str, Any]) -> str:
     date_label = _subject_date(campaign.get("event_date", ""))
     location = (campaign.get("location") or "").strip()
-    if campaign.get("event_format") == "線上":
+    if _campaign_is_online(campaign):
         return f"期待 {date_label} 在線上與您交流！" if date_label else "期待在線上與您交流！"
     if date_label and location:
         short_location = location.replace("台北辦公室", "").strip() or location
@@ -932,11 +966,12 @@ def _optional_activity_info(campaign: dict[str, Any]) -> str:
     )
     if event_datetime:
         values.append(f"活動時間｜{event_datetime}")
+    is_online = _campaign_is_online(campaign)
     if campaign.get("event_format"):
-        values.append(f"活動形式｜{campaign['event_format']}")
-    if campaign.get("location"):
+        values.append(f"活動形式｜{'線上活動' if is_online else '實體活動'}")
+    if campaign.get("location") and not is_online:
         values.append(f"活動地點｜{campaign['location']}")
-    if campaign.get("event_format") != "線上" and campaign.get("address"):
+    if not is_online and campaign.get("address"):
         values.append(f"活動地址｜{campaign['address']}")
     return "【活動資訊】\n" + "\n".join(values) if values else ""
 

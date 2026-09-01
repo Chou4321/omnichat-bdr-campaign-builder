@@ -640,7 +640,7 @@ class GeneratorTests(unittest.TestCase):
             event_details={"service_pdf_name": "service.pdf"},
         )
         self.assertIn("活動確認出席", subjects[0])
-        self.assertIn("先為您暫保留席次", body)
+        self.assertIn("已為您保留線上參與名額", body)
         self.assertIn("活動 Banner｜uploads/banner.png", body)
         self.assertIn("service.pdf", body)
         self.assertIn("15 分鐘", cta)
@@ -662,9 +662,10 @@ class GeneratorTests(unittest.TestCase):
             "活動確認出席｜【零售成長論壇】活動出席確認信（Energy）"
         ])
         self.assertIn("我是 Omnichat 周周，是負責品牌的窗口", body)
-        self.assertIn("先為您暫保留席次", body)
+        self.assertIn("已為您保留線上參與名額", body)
         self.assertIn("活動時間｜2026-08-20 14:00–16:00", body)
-        self.assertIn("活動地點｜線上直播", body)
+        self.assertIn("活動形式｜線上活動", body)
+        self.assertNotIn("活動地點｜線上直播", body)
         self.assertIn("活動 Banner｜uploads/event.png", body)
         self.assertIn("為了讓當天內容更貼近品牌的實際情境", body)
         self.assertIn("・掌握零售市場與消費變化", body)
@@ -849,7 +850,7 @@ class GeneratorTests(unittest.TestCase):
             campaign, "活動後關懷", {"industry_context": HEALTH_INDUSTRY}
         )
         expected_order = [
-            "感謝您撥空參加", "本次活動中", "【活動核心商業洞察】",
+            "感謝您撥空參與", "本次活動中", "【活動核心商業洞察】",
             "保健品", "📄 活動簡報整理｜https://example.com/slides",
             "📄 Omnichat 服務介紹", "15 分鐘交流", "再次感謝您的參與",
         ]
@@ -874,12 +875,39 @@ class GeneratorTests(unittest.TestCase):
             "【打造 Meta 廣告 × 再行銷成長模式】7/24 活動精華整理"
             "（鼎通創新股份有限公司／oee education）"
         ])
-        self.assertIn("活動當天您可能因排程未能前往", body)
+        self.assertIn("您當天可能因排程未能參與線上活動", body)
         self.assertIn("【活動核心商業洞察】", body)
         self.assertIn("📄 活動簡報整理｜https://example.com/highlights", body)
         self.assertIn("15 分鐘交流", cta)
         for forbidden in ("感謝您的參與", "再次感謝您的參與", "感謝撥空參加"):
             self.assertNotIn(forbidden, body)
+
+    def test_all_event_email_templates_inherit_online_format(self):
+        campaign = {
+            **CAMPAIGN,
+            "name": "品牌成長線上交流",
+            "event_format": "線上",
+            "location": "台北會議中心",
+            "address": "台北市測試路 1 號",
+        }
+        forbidden = (
+            "當天現場", "現場議程", "現場交流", "活動現場", "現場見面",
+            "前往活動地點", "會後午茶", "入場", "一起走進", "未能前往",
+            "期待現場與您見面",
+        )
+        scenarios = (
+            "活動前陌生開發",
+            "活動前確認出席通知",
+            "活動後關懷",
+            "活動未出席／活動精華分享",
+        )
+        for scenario in scenarios:
+            subjects, body, _ = generate_email(campaign, scenario, LEAD)
+            combined = "\n".join(subjects + [body])
+            with self.subTest(scenario=scenario):
+                self.assertTrue(any(word in combined for word in ("線上", "活動精華整理")))
+                for phrase in forbidden:
+                    self.assertNotIn(phrase, combined)
 
     def test_absent_event_subject_omits_brand_parentheses_when_empty(self):
         subjects, body, _ = generate_email(
