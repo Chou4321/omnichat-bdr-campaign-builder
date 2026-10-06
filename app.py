@@ -24,6 +24,7 @@ from line_contact_finder import (
     generate_first_contact_message,
 )
 from storage import (
+    IndustryStorageError,
     delete_campaign,
     delete_industry_template,
     load_campaigns,
@@ -288,7 +289,11 @@ def line_contact_finder() -> None:
     copyable_line_output("line_finder_output")
 
 
-def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> dict:
+def _campaign_form_fields(
+    prefix: str,
+    campaign: Optional[dict] = None,
+    industry_templates: Optional[list[dict]] = None,
+) -> dict:
     campaign = campaign or {}
     try:
         current_date = date.fromisoformat(campaign.get("event_date", ""))
@@ -298,7 +303,8 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> dict:
     current_format = campaign.get("event_format", "實體")
     if current_format not in formats:
         current_format = "實體"
-    industries = [item["industry_name"] for item in load_industry_templates()]
+    industry_templates = industry_templates or []
+    industries = [item["industry_name"] for item in industry_templates]
     current_industry = campaign.get("primary_industry") or campaign.get("suitable_industries", "")
     if current_industry and current_industry not in industries:
         industries.append(current_industry)
@@ -510,9 +516,15 @@ def _campaign_form_fields(prefix: str, campaign: Optional[dict] = None) -> dict:
     return values
 
 
-def _show_industry_knowledge(industry_name: str) -> None:
+def _show_industry_knowledge(
+    industry_name: str, industry_templates: list[dict]
+) -> None:
     template = next(
-        (item for item in load_industry_templates() if item["industry_name"] == industry_name),
+        (
+            item
+            for item in industry_templates
+            if item["industry_name"] == industry_name
+        ),
         None,
     )
     if not template:
@@ -533,9 +545,18 @@ def campaign_manager() -> None:
     st.header("活動管理")
     st.caption("活動資料中心｜儲存後由 Email 與 LINE 直接共用。")
     campaigns = load_campaigns()
+    try:
+        industry_templates = load_industry_templates()
+    except IndustryStorageError:
+        # The storage helper already shows a detailed error. Keep the activity
+        # page usable instead of blocking/crashing the entire Streamlit app.
+        industry_templates = []
+        st.warning("產業資料暫時無法載入；活動列表仍可查看，請稍後再試。")
     with st.expander("＋ 新增活動", expanded=not campaigns):
         with st.form("campaign_create_form", clear_on_submit=False):
-            values = _campaign_form_fields("create")
+            values = _campaign_form_fields(
+                "create", industry_templates=industry_templates
+            )
             submitted = st.form_submit_button("儲存活動", type="primary")
         if submitted:
             if not values["name"] or not values["primary_industry"]:
@@ -544,14 +565,17 @@ def campaign_manager() -> None:
                 save_campaign(Campaign(**values).to_dict())
                 st.success("活動已儲存。")
                 st.rerun()
-        _show_industry_knowledge(values["primary_industry"])
+        _show_industry_knowledge(
+            values["primary_industry"], industry_templates
+        )
 
-    campaigns = load_campaigns()
     st.subheader(f"活動列表（{len(campaigns)}）")
     for campaign in campaigns:
         with st.expander(f"{campaign['name']}｜{campaign.get('event_date', '')}"):
             with st.form(f"campaign_edit_{campaign['id']}"):
-                values = _campaign_form_fields(f"edit_{campaign['id']}", campaign)
+                values = _campaign_form_fields(
+                    f"edit_{campaign['id']}", campaign, industry_templates
+                )
                 col1, col2 = st.columns(2)
                 update = col1.form_submit_button("儲存修改", type="primary")
                 delete = col2.form_submit_button("刪除活動")
@@ -566,7 +590,9 @@ def campaign_manager() -> None:
                 delete_campaign(campaign["id"])
                 st.success("活動已刪除。")
                 st.rerun()
-            _show_industry_knowledge(values["primary_industry"])
+            _show_industry_knowledge(
+                values["primary_industry"], industry_templates
+            )
             st.download_button(
                 "下載此活動 JSON",
                 data=json.dumps({**campaign, **values}, ensure_ascii=False, indent=2),

@@ -1,8 +1,11 @@
 import os
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
+
+import storage
 
 
 class UiSmokeTests(unittest.TestCase):
@@ -26,6 +29,16 @@ class UiSmokeTests(unittest.TestCase):
             ],
         )
         self.assertEqual(app.header[0].value, "活動管理")
+
+    def test_default_page_loads_industry_storage_once(self):
+        app_path = Path(__file__).parents[1] / "app.py"
+        original_loader = storage.load_industry_templates
+        with patch(
+            "storage.load_industry_templates", wraps=original_loader
+        ) as loader:
+            app = AppTest.from_file(str(app_path)).run(timeout=10)
+        self.assertFalse(app.exception)
+        self.assertEqual(loader.call_count, 1)
 
     def test_hidden_pages_are_not_in_navigation(self):
         app_path = Path(__file__).parents[1] / "app.py"

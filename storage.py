@@ -1,5 +1,6 @@
 import json
 import os
+from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Union
@@ -191,6 +192,9 @@ def _create_supabase_client(url: str, secret_key: str):
             options=ClientOptions(
                 auto_refresh_token=False,
                 persist_session=False,
+                # Do not let an unavailable/cold Supabase instance block the
+                # whole Streamlit page for the SDK default (120 seconds).
+                postgrest_client_timeout=10,
             ),
         )
     except Exception as error:
@@ -216,6 +220,7 @@ def _industry_row(template: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@lru_cache(maxsize=4)
 def _migrate_industry_json_once(client) -> None:
     migration = (
         client.table(MIGRATIONS_TABLE)
@@ -246,6 +251,7 @@ def _migrate_industry_json_once(client) -> None:
     ).execute()
 
 
+@lru_cache(maxsize=1)
 def _load_supabase_industries() -> list[dict[str, Any]]:
     try:
         client = _supabase_client()
@@ -270,7 +276,8 @@ def load_industry_templates(
         path = INDUSTRY_TEMPLATES_PATH
     if path is not None:
         return JsonStore(path).load()
-    return _load_supabase_industries()
+    # Protect the cached nested payload from accidental mutation by UI code.
+    return deepcopy(_load_supabase_industries())
 
 
 def save_industry_template(
@@ -285,6 +292,7 @@ def save_industry_template(
         _supabase_client().table(INDUSTRY_TABLE).insert(
             _industry_row(template)
         ).execute()
+        _load_supabase_industries.cache_clear()
     except IndustryStorageError:
         raise
     except Exception as error:
@@ -315,6 +323,7 @@ def update_industry_template(
         client.table(INDUSTRY_TABLE).update(_industry_row(merged)).eq(
             "id", template_id
         ).execute()
+        _load_supabase_industries.cache_clear()
         return True
     except IndustryStorageError:
         raise
@@ -341,6 +350,7 @@ def delete_industry_template(
         if not current.data:
             return False
         client.table(INDUSTRY_TABLE).delete().eq("id", template_id).execute()
+        _load_supabase_industries.cache_clear()
         return True
     except IndustryStorageError:
         raise

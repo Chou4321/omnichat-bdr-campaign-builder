@@ -109,6 +109,7 @@ class StoreTests(unittest.TestCase):
         options = create_client.call_args.kwargs["options"]
         self.assertFalse(options.auto_refresh_token)
         self.assertFalse(options.persist_session)
+        self.assertEqual(options.postgrest_client_timeout, 10)
         _create_supabase_client.cache_clear()
 
     def test_crud(self):
