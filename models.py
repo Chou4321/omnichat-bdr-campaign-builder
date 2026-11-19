@@ -6,6 +6,7 @@ from uuid import uuid4
 
 EMAIL_SCENARIOS = [
     "活動前陌生開發",
+    "活動前打招呼",
     "活動前確認出席通知",
     "活動後關懷",
     "活動未出席／活動精華分享",
@@ -13,8 +14,8 @@ EMAIL_SCENARIOS = [
     "二次追蹤",
 ]
 
-EVENT_EMAIL_SCENARIOS = EMAIL_SCENARIOS[:4]
-NON_EVENT_EMAIL_SCENARIOS = EMAIL_SCENARIOS[4:]
+EVENT_EMAIL_SCENARIOS = EMAIL_SCENARIOS[:5]
+NON_EVENT_EMAIL_SCENARIOS = EMAIL_SCENARIOS[5:]
 
 LINE_SCENARIOS = [
     "陌生開發",

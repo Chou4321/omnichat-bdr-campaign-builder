@@ -185,12 +185,12 @@ class UiSmokeTests(unittest.TestCase):
             "📍 Google 限定邀請｜從廣告獲客到對話商務",
         )
 
-    def test_email_builder_has_six_consolidated_scenarios(self):
+    def test_email_builder_has_consolidated_scenarios(self):
         app_path = Path(__file__).parents[1] / "app.py"
         app = AppTest.from_file(str(app_path)).run(timeout=10)
         app.sidebar.radio[0].set_value("Email 信件").run(timeout=10)
         self.assertEqual(app.selectbox[1].options, [
-            "活動前陌生開發", "活動前確認出席通知",
+            "活動前陌生開發", "活動前打招呼", "活動前確認出席通知",
             "活動後關懷", "活動未出席／活動精華分享",
         ])
         text_inputs = [item.label for item in app.text_input]

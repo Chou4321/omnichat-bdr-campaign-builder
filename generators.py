@@ -440,7 +440,7 @@ def generate_email(
 ) -> tuple[list[str], str, str]:
     normalized = _EMAIL_SCENARIO_MAPPING.get(scenario, scenario)
     supported = {
-        "活動前陌生開發", "活動前確認出席通知", "活動後關懷",
+        "活動前陌生開發", "活動前打招呼", "活動前確認出席通知", "活動後關懷",
         "活動未出席／活動精華分享", "陌生開發", "二次追蹤",
     }
     if normalized not in supported:
@@ -451,9 +451,10 @@ def generate_email(
 
 
 # Old scenario names remain callable so saved drafts/integrations do not break.
-# The UI only exposes the six consolidated scenarios.
+# The UI only exposes the seven consolidated scenarios.
 _EMAIL_SCENARIO_MAPPING = {
     "陌生開發邀約": "活動前陌生開發",
+    # Preserve the historical Pre-call meaning for already-saved integrations.
     "活動報名後打招呼": "活動前確認出席通知",
     "活動前交流邀約": "活動前確認出席通知",
     "活動審核通知": "活動前確認出席通知",
@@ -477,7 +478,7 @@ def _generate_email_v2(
     campaign: dict[str, Any], scenario: str, lead: dict[str, Any],
     event: dict[str, Any],
 ) -> tuple[list[str], str, str]:
-    """Six deterministic Email templates using activity and Supabase industry data."""
+    """Deterministic Email templates using activity and Supabase industry data."""
     is_event = scenario.startswith("活動")
     is_online = _campaign_is_online(campaign)
     contact = (lead.get("contact") or "").strip()
@@ -565,6 +566,56 @@ def _generate_email_v2(
 
 {closing}{banner_block}"""
         return subjects, _clean_email(body), f"{exchange_cta}\n\n{booking_line}"
+
+    if scenario == "活動前打招呼":
+        subject = f"參與「{event_name}」前，先掌握活動交流重點"
+        if brand:
+            subject += f"（{brand}）"
+
+        activity_industry = _campaign_industry(campaign) or industry_name or "品牌"
+        activity_summary, grounded_points = _grounded_activity_content(
+            campaign, event, activity_industry
+        )
+        greeting_points = points or grounded_points[:4]
+        concerns = "\n".join(f"• {point}" for point in greeting_points[:4])
+        if not concerns:
+            concerns = "• 本次活動分享主題與品牌經營交流重點"
+
+        opening = (
+            "我是稍早致電給您的 Omnichat 周周，"
+            f"已收到您報名「{event_name}」活動，目前正陸續確認名單中，"
+            "先與您打聲招呼！"
+        )
+        cta = (
+            f"👉 歡迎直接回覆方便時段，或點此快速預約【點我預約】｜{booking}"
+            "（彈性安排 15 分鐘交談）"
+            if booking else
+            "👉 歡迎直接回覆方便時段，彈性安排 15 分鐘交談。"
+        )
+        greeting_service = service or (
+            "https://docs.google.com/presentation/d/"
+            "1kk_0ZfMZ_e69MVyj9rXGtYmyibH5IWebkliSk6GCCK8/edit"
+        )
+        greeting_service_line = (
+            "📄 Omnichat 服務介紹（含會員經營策略與實務案例）"
+            f"｜{greeting_service}"
+        )
+        body = f"""{greeting}
+
+{opening}
+
+{activity_summary}
+
+💡 若您近期正關注：
+{concerns}
+
+很樂意在活動前依您的品牌現況，分享相關案例作為參考，讓當天交流更有收穫。
+{cta}
+
+{greeting_service_line}
+
+期待活動前能先認識您，讓當天交流更有收穫😊"""
+        return [subject], _clean_email(body), cta
 
     if scenario == "活動前確認出席通知":
         subject = f"活動確認出席｜【{event_name}】活動出席確認信（Energy）"

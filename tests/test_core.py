@@ -346,6 +346,47 @@ class GeneratorTests(unittest.TestCase):
         self.assertIn(CAMPAIGN["activity_point_1"], body)
         self.assertIn("15 分鐘", cta)
 
+    def test_pre_event_greeting_uses_registered_lead_master_template(self):
+        campaign = {
+            **CAMPAIGN,
+            "name": "食品產業成長新曲線",
+            "partner": "台灣牧場 & 食品研究所",
+            "topic": "從會員數據到分眾行銷的跨界實戰",
+            "activity_points": [
+                "掌握食品產業趨勢與消費行為",
+                "建立會員數據經營策略",
+                "透過精準分眾提升顧客互動",
+                "深化私域流量與會員關係",
+            ],
+        }
+        subjects, body, cta = generate_email(
+            campaign,
+            "活動前打招呼",
+            {"brand": "富和國際企業有限公司", "contact": "許惠斐 總經理"},
+        )
+        self.assertEqual(subjects, [
+            "參與「食品產業成長新曲線」前，先掌握活動交流重點"
+            "（富和國際企業有限公司）"
+        ])
+        self.assertIn("Dear 許惠斐 總經理 您好，", body)
+        self.assertIn("我是稍早致電給您的 Omnichat 周周", body)
+        self.assertIn("已收到您報名「食品產業成長新曲線」活動", body)
+        self.assertIn("台灣牧場 & 食品研究所", body)
+        self.assertIn("💡 若您近期正關注：", body)
+        self.assertIn("• 深化私域流量與會員關係", body)
+        self.assertIn("Omnichat 服務介紹", body)
+        self.assertIn("15 分鐘", cta)
+
+    def test_pre_event_greeting_omits_empty_brand_parentheses(self):
+        subjects, body, _ = generate_email(
+            CAMPAIGN, "活動前打招呼", {"brand": "", "contact": ""}
+        )
+        self.assertEqual(
+            subjects, ["參與「零售成長論壇」前，先掌握活動交流重點"]
+        )
+        self.assertNotIn("（）", subjects[0])
+        self.assertTrue(body.startswith("您好，"))
+
     def test_rule_based_subject_suggestions_are_distinct_and_grounded(self):
         campaign = {
             **CAMPAIGN,
@@ -585,7 +626,7 @@ class GeneratorTests(unittest.TestCase):
 
     def test_scenario_counts(self):
         self.assertEqual(EMAIL_SCENARIOS, [
-            "活動前陌生開發", "活動前確認出席通知", "活動後關懷",
+            "活動前陌生開發", "活動前打招呼", "活動前確認出席通知", "活動後關懷",
             "活動未出席／活動精華分享", "陌生開發", "二次追蹤",
         ])
         self.assertEqual(len(LINE_SCENARIOS), 13)
@@ -605,10 +646,10 @@ class GeneratorTests(unittest.TestCase):
         self.assertIn("官網目前以節慶禮盒為主要溝通內容。", body)
         self.assertNotIn("測試品牌 的產業與現況", body)
 
-    def test_six_consolidated_templates_are_distinct(self):
+    def test_consolidated_templates_are_distinct(self):
         bodies = []
         for scenario in [
-            "活動前陌生開發", "活動前確認出席通知", "活動後關懷",
+            "活動前陌生開發", "活動前打招呼", "活動前確認出席通知", "活動後關懷",
             "活動未出席／活動精華分享", "陌生開發", "二次追蹤",
         ]:
             campaign = CAMPAIGN if scenario.startswith("活動") else {}
@@ -616,7 +657,7 @@ class GeneratorTests(unittest.TestCase):
             self.assertGreaterEqual(len(subjects), 1)
             self.assertTrue(cta)
             bodies.append(body)
-        self.assertEqual(len(set(bodies)), 6)
+        self.assertEqual(len(set(bodies)), 7)
 
     def test_legacy_email_scenarios_map_to_consolidated_templates(self):
         mappings = {
